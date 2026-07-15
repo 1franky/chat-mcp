@@ -1,0 +1,134 @@
+name: ai-data-chat
+
+services:
+  chat-postgres:
+    image: pgvector/pgvector:0.8.2-pg18-trixie@sha256:b7337db8fe39d12fe8ecb0003c72680f24479813a744b43154eee6f2eab5a5f3
+    user: "999:999"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ai_data_chat}
+      POSTGRES_USER: ${POSTGRES_USER:-ai_data_chat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      PGDATA: /var/lib/postgresql/18/docker
+    volumes:
+      - chat-postgres-data:/var/lib/postgresql
+    networks:
+      - chat-internal
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql:uid=999,gid=999,mode=0775
+    shm_size: 128mb
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  chat-backend:
+    image: ai-data-chat-backend:0.1.0
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://chat-postgres:5432/${POSTGRES_DB:-ai_data_chat}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-ai_data_chat}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      APP_INTEGRATIONS_MODE: fake
+      MCP_BASE_URL: ${MCP_BASE_URL:-http://data-platform-mcp:8000}
+      MCP_ENDPOINT: ${MCP_ENDPOINT:-/mcp}
+      MCP_PROTOCOL_VERSION: ${MCP_PROTOCOL_VERSION:-2025-11-25}
+      MCP_CONTRACT_MAJOR: ${MCP_CONTRACT_MAJOR:-1}
+      CREDENTIAL_MASTER_KEY: ${CREDENTIAL_MASTER_KEY:-}
+      ALLOW_PUBLIC_REGISTRATION: ${ALLOW_PUBLIC_REGISTRATION:-true}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-26214400}
+      MAX_TOOL_ROUNDS: ${MAX_TOOL_ROUNDS:-6}
+      MAX_TOOL_RESULT_BYTES: ${MAX_TOOL_RESULT_BYTES:-1048576}
+    volumes:
+      - chat-documents:/var/lib/ai-data-chat/documents
+    networks:
+      - chat-internal
+      - ai-platform
+    depends_on:
+      chat-postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - --show-error
+        - http://127.0.0.1:8080/actuator/health/readiness
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:uid=10001,gid=10001,mode=1770
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  chat-frontend:
+    image: ai-data-chat-frontend:0.1.0
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      NGINX_MAX_UPLOAD_SIZE: ${NGINX_MAX_UPLOAD_SIZE:-25m}
+    ports:
+      - "${HTTP_PORT:-8080}:8080"
+    networks:
+      - chat-ingress
+      - chat-internal
+    depends_on:
+      chat-backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - -q
+        - -O
+        - /dev/null
+        - http://127.0.0.1:8080/healthz
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /etc/nginx/conf.d:uid=101,gid=101,mode=0755
+      - /tmp:uid=101,gid=101,mode=1770
+      - /var/cache/nginx:uid=101,gid=101,mode=0755
+      - /var/run:uid=101,gid=101,mode=0755
+    restart: unless-stopped
+
+networks:
+  chat-ingress:
+  chat-internal:
+    internal: true
+  ai-platform:
+    name: ${AI_PLATFORM_NETWORK:-ai-platform}
+    external: true
+
+volumes:
+  chat-postgres-data:
+  chat-documents:

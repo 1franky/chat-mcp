@@ -1,0 +1,15 @@
+.git
+.github
+.DS_Store
+.env
+AI_DATA_CHAT_PROMPT.md
+backend
+docs
+test-support
+**/.angular
+**/coverage
+**/dist
+**/node_modules
+**/target
+frontend/playwright-report
+frontend/test-results
