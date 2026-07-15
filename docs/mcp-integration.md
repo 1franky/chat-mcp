@@ -4,7 +4,7 @@
 
 `McpGateway` es el único contrato que application conoce. La versión estable seleccionada del protocolo es `2025-11-25`; el transporte remoto Streamable HTTP no se implementa todavía.
 
-Sprint 0 contiene dos dobles:
+Los dos dobles creados en Sprint 0 siguen siendo la unica implementación MCP hasta Sprint 2:
 
 1. `FakeMcpGateway` en proceso, para pruebas unitarias y el endpoint de estado.
 2. WireMock en `test-support/fake-mcp`, para comprobar mensajes JSON-RPC HTTP de forma aislada.

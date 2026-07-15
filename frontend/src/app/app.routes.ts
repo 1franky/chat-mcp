@@ -14,6 +14,12 @@ export const routes: Routes = [
     loadComponent: () => import('./features/home/home-page').then((module) => module.HomePage),
   },
   {
+    path: 'settings/providers',
+    canActivate: [authenticatedGuard],
+    loadComponent: () =>
+      import('./features/providers/providers-page').then((module) => module.ProvidersPage),
+  },
+  {
     path: 'admin/users',
     canActivate: [authenticatedGuard, adminGuard],
     loadComponent: () =>

@@ -2,12 +2,17 @@ package com.aidatachat.adapters.out.fake;
 
 import com.aidatachat.application.port.out.LlmProviderPort;
 import com.aidatachat.application.port.out.ModelCatalogPort;
+import com.aidatachat.domain.model.CapabilityAvailability;
+import com.aidatachat.domain.model.DiscoveredProviderModel;
 import com.aidatachat.domain.model.IntegrationState;
 import com.aidatachat.domain.model.LlmChatRequest;
 import com.aidatachat.domain.model.LlmChunk;
 import com.aidatachat.domain.model.ModelDescriptor;
 import com.aidatachat.domain.model.ProviderCapabilities;
+import com.aidatachat.domain.model.ProviderCapabilityProfile;
 import com.aidatachat.domain.model.ProviderDescriptor;
+import com.aidatachat.domain.model.ProviderProbeResult;
+import com.aidatachat.domain.model.ProviderType;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Flow;
@@ -18,6 +23,20 @@ public final class FakeLlmProviderAdapter implements LlmProviderPort, ModelCatal
 
     private static final ProviderCapabilities CAPABILITIES =
             new ProviderCapabilities(true, true, false, false, false, false, true);
+    private static final ProviderCapabilityProfile CAPABILITY_PROFILE =
+            new ProviderCapabilityProfile(
+                    CapabilityAvailability.SUPPORTED,
+                    CapabilityAvailability.SUPPORTED,
+                    CapabilityAvailability.UNSUPPORTED,
+                    CapabilityAvailability.UNSUPPORTED,
+                    CapabilityAvailability.UNSUPPORTED,
+                    CapabilityAvailability.UNSUPPORTED,
+                    CapabilityAvailability.SUPPORTED);
+
+    @Override
+    public ProviderType providerType() {
+        return ProviderType.FAKE;
+    }
 
     @Override
     public ProviderDescriptor descriptor() {
@@ -35,6 +54,25 @@ public final class FakeLlmProviderAdapter implements LlmProviderPort, ModelCatal
         return List.of(
                 new ModelDescriptor(
                         MODEL_ID, "Modelo falso determinista", "CONFIGURED", CAPABILITIES));
+    }
+
+    @Override
+    public ProviderCapabilityProfile capabilities(ProviderClientConfiguration configuration) {
+        return CAPABILITY_PROFILE;
+    }
+
+    @Override
+    public ProviderProbeResult testConnection(
+            ProviderClientConfiguration configuration, char[] credential) {
+        return ProviderProbeResult.success("fake-request");
+    }
+
+    @Override
+    public List<DiscoveredProviderModel> discoverModels(
+            ProviderClientConfiguration configuration, char[] credential) {
+        return List.of(
+                new DiscoveredProviderModel(
+                        MODEL_ID, "Modelo falso determinista", CAPABILITY_PROFILE));
     }
 
     @Override

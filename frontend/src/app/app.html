@@ -6,6 +6,7 @@
   <span class="spacer"></span>
 
   @if (auth.currentUser(); as user) {
+    <a mat-button routerLink="/settings/providers">Proveedores</a>
     @if (user.role === 'ADMIN') {
       <a mat-button routerLink="/admin/users">Usuarios</a>
     }
@@ -14,7 +15,7 @@
       Cerrar sesion
     </button>
   } @else {
-    <span class="sprint">Sprint 1 · Identidad</span>
+    <span class="sprint">Sprint 2 · Proveedores</span>
   }
 </mat-toolbar>
 

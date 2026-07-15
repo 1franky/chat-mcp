@@ -21,7 +21,11 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
-@SpringBootTest(properties = "app.identity.allow-public-registration=false")
+@SpringBootTest(
+        properties = {
+            "app.identity.allow-public-registration=false",
+            "app.providers.credential-master-key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+        })
 @Testcontainers(disabledWithoutDocker = true)
 @SuppressWarnings("deprecation")
 class PublicRegistrationPolicyIntegrationTest {

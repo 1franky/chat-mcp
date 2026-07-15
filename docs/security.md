@@ -53,10 +53,28 @@ otras cuentas.
 - No existe recuperacion de contrasena, MFA ni politica de expiracion de credenciales en Sprint 1.
 - Las bajas son logicas y no permiten reutilizar correo; una politica de borrado completo requiere
   una decision futura.
-- Cifrado de credenciales de proveedores empieza en Sprint 2.
+- La rotacion de claves de proveedor entre varias versiones sigue pendiente; Sprint 2 carga una
+  unica version activa.
 - MCP remoto sigue deshabilitado y sin autenticacion; solo backend pertenece a `ai-platform`.
 
 ## Secretos
 
 Nunca guardar `.env`, contrasenas, claves de proveedores o `CREDENTIAL_MASTER_KEY` en Git.
 Produccion debe inyectarlos desde un gestor de secretos y rotarlos de forma independiente.
+
+## Proveedores y credenciales
+
+- Las claves de proveedor se cifran con AES-256-GCM, nonce aleatorio, tag autenticado, AAD y
+  version de clave. La clave maestra debe decodificar a 32 bytes y el backend falla si no existe.
+- La API solo devuelve una pista de cuatro caracteres. Ciphertext, nonce, clave y cuerpos de error
+  externos no se incluyen en respuestas, logs, metricas ni auditoria.
+- Toda lectura de conexion o modelo filtra simultaneamente por propietario e identificador. El rol
+  `ADMIN` no evita este filtro.
+- Bases OpenAI-compatible y Ollama requieren allowlist exacta. HTTP necesita autorizacion separada;
+  redirects, link-local/metadata y bases con userinfo/query/fragment se rechazan.
+- Las respuestas de proveedor tienen timeout y limite de bytes. Sprint 2 no aplica reintentos
+  automaticos a pruebas de conexion para evitar duplicar solicitudes potencialmente cobrables.
+
+La version de clave prepara rotacion, pero todavía no existe un job de recifrado ni soporte para
+varias claves simultaneas. La ventana entre validacion DNS y conexion es un riesgo residual que
+debe endurecerse antes de aceptar dominios controlados por terceros fuera de una allowlist estable.

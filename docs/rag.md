@@ -1,6 +1,6 @@
 # RAG
 
-RAG no esta implementado en Sprint 1.
+RAG no esta implementado en Sprint 2.
 
 Sólo se reservan:
 
