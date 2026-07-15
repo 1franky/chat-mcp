@@ -20,8 +20,10 @@ spring:
     problemdetails:
       enabled: true
   session:
+    timeout: ${SESSION_TIMEOUT:30m}
     jdbc:
       initialize-schema: never
+      table-name: identity.spring_session
 
 server:
   port: ${SERVER_PORT:8080}
@@ -30,6 +32,13 @@ server:
   error:
     include-message: never
     include-stacktrace: never
+  servlet:
+    session:
+      cookie:
+        name: AI_DATA_CHAT_SESSION
+        http-only: true
+        secure: ${SESSION_COOKIE_SECURE:false}
+        same-site: lax
 
 management:
   endpoints:
@@ -56,9 +65,20 @@ info:
   application:
     name: AI Data Chat
     version: "@project.version@"
-    sprint: 0
+    sprint: 1
 
 app:
+  identity:
+    allow-public-registration: ${ALLOW_PUBLIC_REGISTRATION:true}
+  security:
+    csrf-cookie-secure: ${CSRF_COOKIE_SECURE:false}
+    rate-limit:
+      login:
+        attempts: ${LOGIN_RATE_LIMIT_ATTEMPTS:5}
+        window: ${LOGIN_RATE_LIMIT_WINDOW:1m}
+      registration:
+        attempts: ${REGISTRATION_RATE_LIMIT_ATTEMPTS:10}
+        window: ${REGISTRATION_RATE_LIMIT_WINDOW:1h}
   integrations:
     mode: ${APP_INTEGRATIONS_MODE:fake}
   mcp:

@@ -1,71 +1,40 @@
-import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatToolbarModule } from '@angular/material/toolbar';
-
-type IntegrationState = 'UP' | 'DEGRADED' | 'DOWN';
-
-interface ProviderStatus {
-  displayName: string;
-  providerType: string;
-  state: IntegrationState;
-  fake: boolean;
-}
-
-interface McpStatus {
-  state: IntegrationState;
-  serverVersion: string;
-  contractVersion: string;
-  protocolVersion: string;
-  detail: string;
-  fake: boolean;
-}
-
-interface BootstrapStatus {
-  application: string;
-  version: string;
-  sprint: number;
-  mode: string;
-  llmProvider: ProviderStatus;
-  mcp: McpStatus;
-}
+import { Router, RouterLink, RouterOutlet } from '@angular/router';
+import { AuthService } from './core/auth/auth.service';
 
 @Component({
   selector: 'app-root',
-  imports: [MatButtonModule, MatCardModule, MatProgressSpinnerModule, MatToolbarModule],
+  imports: [MatButtonModule, MatToolbarModule, RouterLink, RouterOutlet],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
 export class App {
-  private readonly http = inject(HttpClient);
+  protected readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
 
-  protected readonly status = signal<BootstrapStatus | null>(null);
-  protected readonly loading = signal(true);
-  protected readonly error = signal(false);
+  protected readonly backendUnavailable = signal(false);
+  protected readonly loggingOut = signal(false);
 
   constructor() {
-    this.reload();
-  }
-
-  protected reload(): void {
-    this.loading.set(true);
-    this.error.set(false);
-    this.http.get<BootstrapStatus>('/api/system/status').subscribe({
-      next: (status) => {
-        this.status.set(status);
-        this.loading.set(false);
-      },
-      error: () => {
-        this.status.set(null);
-        this.error.set(true);
-        this.loading.set(false);
-      },
+    this.auth.ensureBootstrap().subscribe({
+      next: () => this.backendUnavailable.set(false),
+      error: () => this.backendUnavailable.set(true),
     });
   }
 
-  protected statusClass(state: IntegrationState): string {
-    return `status status--${state.toLowerCase()}`;
+  protected logout(): void {
+    if (this.loggingOut()) {
+      return;
+    }
+    this.loggingOut.set(true);
+    this.auth.logout().subscribe({
+      next: () => {
+        this.loggingOut.set(false);
+        void this.router.navigate(['/auth']);
+      },
+      error: () => this.loggingOut.set(false),
+    });
   }
 }

@@ -41,8 +41,24 @@ class PostgresMigrationTest {
                                 + "WHERE schema_name IN ('identity', 'chat', 'rag', 'audit') "
                                 + "ORDER BY schema_name",
                         String.class);
+        List<String> sprintOneTables =
+                jdbcTemplate.queryForList(
+                        "SELECT table_schema || '.' || table_name "
+                                + "FROM information_schema.tables "
+                                + "WHERE (table_schema = 'identity' AND table_name IN "
+                                + "('app_user', 'spring_session', 'spring_session_attributes')) "
+                                + "OR (table_schema = 'audit' "
+                                + "AND table_name = 'security_audit_event') "
+                                + "ORDER BY table_schema, table_name",
+                        String.class);
 
         assertThat(vectorExtensions).isOne();
         assertThat(schemas).containsExactly("audit", "chat", "identity", "rag");
+        assertThat(sprintOneTables)
+                .containsExactly(
+                        "audit.security_audit_event",
+                        "identity.app_user",
+                        "identity.spring_session",
+                        "identity.spring_session_attributes");
     }
 }

@@ -1,0 +1,156 @@
+:host {
+  display: block;
+}
+
+.admin-shell {
+  width: min(1240px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: clamp(2.5rem, 6vw, 5rem) 0;
+}
+
+.heading {
+  max-width: 720px;
+  margin-bottom: 2rem;
+}
+
+.heading h1 {
+  margin: 0.3rem 0 0.7rem;
+  font-size: clamp(2.3rem, 5vw, 4rem);
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.heading p:not(.eyebrow) {
+  color: #4a6170;
+  line-height: 1.6;
+}
+
+.eyebrow {
+  color: #087482;
+  font-size: 0.76rem;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+mat-card,
+.users-panel {
+  border: 1px solid rgba(21, 54, 74, 0.14);
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.create-card {
+  position: sticky;
+  top: 5rem;
+}
+
+mat-card-content {
+  padding-top: 1.3rem;
+}
+
+form {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.users-panel {
+  overflow: hidden;
+  border-radius: 0.75rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 1rem;
+  border-bottom: 1px solid rgba(21, 54, 74, 0.09);
+  text-align: left;
+  vertical-align: middle;
+}
+
+th {
+  color: #607481;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+td:first-child span {
+  display: block;
+  margin-top: 0.25rem;
+  color: #607481;
+  font-size: 0.84rem;
+}
+
+.role {
+  display: inline-flex;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: #e1edf9;
+  color: #245477;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.actions {
+  min-width: 16rem;
+  text-align: right;
+}
+
+.danger {
+  color: #a23832;
+}
+
+.pagination,
+.loading {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  color: #4a6170;
+}
+
+.loading {
+  min-height: 10rem;
+}
+
+.page-error {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 0.65rem;
+  background: #ffe8e6;
+  color: #7c2521;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .admin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .create-card {
+    position: static;
+  }
+}

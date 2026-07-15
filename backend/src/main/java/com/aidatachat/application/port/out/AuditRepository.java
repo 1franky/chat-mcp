@@ -9,5 +9,11 @@ public interface AuditRepository {
     void append(AuditEvent event);
 
     record AuditEvent(
-            UUID actorId, String eventType, Instant occurredAt, Map<String, String> safeMetadata) {}
+            UUID actorId,
+            UUID targetId,
+            String eventType,
+            boolean success,
+            Instant occurredAt,
+            String remoteAddress,
+            Map<String, String> safeMetadata) {}
 }

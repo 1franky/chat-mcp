@@ -1,0 +1,90 @@
+<main class="auth-shell">
+  <section class="auth-copy" aria-labelledby="auth-title">
+    <p class="eyebrow">IDENTIDAD SEGURA</p>
+    <h1 id="auth-title">Tu espacio privado para trabajar con datos e IA</h1>
+    <p>
+      Las sesiones viven en el servidor y las credenciales nunca se guardan en el navegador. Los
+      proveedores reales, chat y RAG permanecen fuera del alcance de este sprint.
+    </p>
+  </section>
+
+  <mat-card appearance="outlined" class="auth-card">
+    @if (loadingBootstrap()) {
+      <div class="loading" aria-live="polite">
+        <mat-spinner diameter="34"></mat-spinner>
+        <span>Preparando acceso seguro…</span>
+      </div>
+    } @else {
+      @if (bootstrap()?.bootstrapRequired) {
+        <p class="setup-label">Configuracion inicial</p>
+        <h2>Crea el primer administrador</h2>
+        <p class="supporting">Esta cuenta sera ADMIN. La asignacion se protege en base de datos.</p>
+      } @else {
+        <div class="mode-switch" aria-label="Modo de acceso">
+          <button
+            mat-button
+            type="button"
+            [class.active]="mode() === 'login'"
+            (click)="selectMode('login')"
+          >
+            Iniciar sesion
+          </button>
+          @if (bootstrap()?.registrationOpen) {
+            <button
+              mat-button
+              type="button"
+              [class.active]="mode() === 'register'"
+              (click)="selectMode('register')"
+            >
+              Crear cuenta
+            </button>
+          }
+        </div>
+        <h2>{{ mode() === 'login' ? 'Bienvenido de nuevo' : 'Crea tu cuenta' }}</h2>
+      }
+
+      <form [formGroup]="form" (ngSubmit)="submit()">
+        @if (mode() === 'register') {
+          <mat-form-field appearance="outline">
+            <mat-label>Nombre visible</mat-label>
+            <input matInput formControlName="displayName" autocomplete="name" />
+            @if (form.controls.displayName.touched && form.controls.displayName.invalid) {
+              <mat-error>Usa entre 2 y 120 caracteres.</mat-error>
+            }
+          </mat-form-field>
+        }
+
+        <mat-form-field appearance="outline">
+          <mat-label>Correo</mat-label>
+          <input matInput formControlName="email" type="email" autocomplete="email" />
+          @if (form.controls.email.touched && form.controls.email.invalid) {
+            <mat-error>Ingresa un correo valido.</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Contrasena</mat-label>
+          <input
+            matInput
+            formControlName="password"
+            type="password"
+            [autocomplete]="mode() === 'login' ? 'current-password' : 'new-password'"
+          />
+          @if (form.controls.password.touched && form.controls.password.invalid) {
+            <mat-error>La contrasena debe tener entre 12 y 128 caracteres.</mat-error>
+          }
+        </mat-form-field>
+
+        @if (error()) {
+          <p class="form-error" role="alert">{{ error() }}</p>
+        }
+
+        <button mat-flat-button type="submit" [disabled]="submitting()">
+          {{
+            submitting() ? 'Procesando…' : mode() === 'login' ? 'Iniciar sesion' : 'Crear cuenta'
+          }}
+        </button>
+      </form>
+    }
+  </mat-card>
+</main>

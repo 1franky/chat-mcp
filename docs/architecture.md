@@ -2,7 +2,7 @@
 
 ## Contexto y alcance
 
-Sprint 0 entrega un monolito modular desplegable, no microservicios funcionales. Los límites internos permiten cambiar adaptadores sin acoplar dominio y casos de uso a Spring AI, SDKs de proveedores o MCP.
+Sprint 1 mantiene un monolito modular desplegable. Los limites internos permiten cambiar persistencia e integraciones sin acoplar dominio y casos de uso a Spring, SDKs de proveedores o MCP.
 
 ```mermaid
 flowchart TB
@@ -10,10 +10,11 @@ flowchart TB
     IN --> APP["application.service"]
     APP --> DOMAIN["domain.model"]
     APP --> OUT["application.port.out"]
-    CFG["configuration: composición"] --> APP
+    CFG["configuration: composicion y seguridad"] --> APP
     CFG --> FAKE["adapters.out.fake"]
     FAKE --> OUT
-    INFRA["infrastructure: persistencia futura"] --> OUT
+    JPA["adapters.out.persistence: JPA/JDBC"] --> OUT
+    SEC["adapters.out.security: Argon2/sesiones"] --> OUT
 ```
 
 Reglas verificadas con ArchUnit:
@@ -26,7 +27,10 @@ Reglas verificadas con ArchUnit:
 
 `LlmProviderPort`, `ModelCatalogPort`, `McpGateway`, `EmbeddingProviderPort`, `DocumentStoragePort`, `VectorSearchPort`, `CredentialCipherPort`, `ConversationRepository`, `DocumentRepository` y `AuditRepository`.
 
-Sólo `LlmProviderPort`, `ModelCatalogPort` y `McpGateway` tienen adaptadores fake en Sprint 0. El resto es una frontera de compilación, no una capacidad implementada.
+Sprint 1 anade `UserAccountRepository`, `IdentityTransactionPort`, `PasswordHashPort` y
+`SessionInvalidationPort`, con adaptadores PostgreSQL/Spring Security. Los puertos de proveedores
+y MCP conservan exclusivamente adaptadores fake; las demas fronteras siguen sin capacidad
+funcional.
 
 ## Contenedores y redes
 
@@ -53,8 +57,28 @@ flowchart LR
 
 ## Datos
 
-Flyway crea la extensión `vector` y los namespaces `identity`, `chat`, `rag` y `audit`. No crea tablas funcionales porque corresponderían a sprints posteriores. JPA usa `ddl-auto=validate`; Flyway es la única autoridad de esquema.
+Flyway crea la extension `vector`, los namespaces delimitados y, en Sprint 1, tablas de usuarios,
+sesiones JDBC y auditoria de seguridad. Los schemas `chat` y `rag` siguen vacios. JPA usa
+`ddl-auto=validate`; Flyway es la unica autoridad de esquema.
 
 ## Flujo disponible
 
-El único flujo web de producto es `GET /api/system/status`: el controlador llama al caso de uso, que consulta los puertos fake y devuelve su estado declarado. No transmite chats ni llama servicios externos.
+```mermaid
+sequenceDiagram
+    participant UI as Angular
+    participant WEB as AuthController
+    participant APP as IdentityService
+    participant DB as PostgreSQL
+    UI->>WEB: GET /api/auth/bootstrap
+    WEB->>APP: bootstrap(principal)
+    APP->>DB: existe algun usuario?
+    DB-->>APP: no
+    UI->>WEB: POST /api/auth/register + CSRF
+    WEB->>APP: register(command)
+    APP->>DB: SERIALIZABLE + advisory lock + INSERT ADMIN
+    WEB->>DB: guardar sesion JDBC
+    WEB-->>UI: perfil publico + cookie HttpOnly
+```
+
+Tambien estan disponibles login/logout, perfil y administracion de usuarios. El endpoint de estado
+de Sprint 0 se conserva. Ningun flujo transmite chats o llama servicios externos pagados.
