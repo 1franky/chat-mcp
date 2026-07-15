@@ -1,0 +1,47 @@
+<main class="home-shell">
+  <section class="hero" aria-labelledby="home-title">
+    <p class="eyebrow">SPRINT 1 · IDENTIDAD Y USUARIOS</p>
+    <h1 id="home-title">Hola, {{ auth.currentUser()?.displayName }}</h1>
+    <p>
+      Tu sesion segura esta activa. El siguiente sprint incorporara proveedores y modelos; esta
+      entrega no realiza llamadas a APIs pagadas.
+    </p>
+  </section>
+
+  <section class="card-grid" aria-label="Estado de identidad">
+    <mat-card appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>Cuenta</mat-card-title>
+        <mat-card-subtitle>{{ auth.currentUser()?.email }}</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <span class="role">{{ auth.currentUser()?.role }}</span>
+        <p>La sesion se persiste en PostgreSQL y la cookie no es accesible desde JavaScript.</p>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>Integraciones</mat-card-title>
+        <mat-card-subtitle>Modo seguro de desarrollo</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <span class="fake">FAKE</span>
+        <p>LLM y MCP siguen siendo dobles deterministas sin consumo externo.</p>
+      </mat-card-content>
+    </mat-card>
+
+    @if (auth.isAdmin()) {
+      <mat-card appearance="outlined">
+        <mat-card-header>
+          <mat-card-title>Administracion</mat-card-title>
+          <mat-card-subtitle>Capacidad exclusiva de ADMIN</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Crea, lista, promueve o desactiva usuarios sin acceder a sus datos privados.</p>
+          <a mat-stroked-button routerLink="/admin/users">Administrar usuarios</a>
+        </mat-card-content>
+      </mat-card>
+    }
+  </section>
+</main>

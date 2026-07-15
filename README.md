@@ -1,13 +1,13 @@
 # AI Data Chat
 
-Bootstrap del Sprint 0 para una aplicación de chat con IA orientada a datos. Este repositorio es un monorepo con backend Spring Boot, frontend Angular, PostgreSQL con pgvector y dobles de prueba deterministas. La especificación principal es [`AI_DATA_CHAT_PROMPT.md`](AI_DATA_CHAT_PROMPT.md).
+Aplicacion de chat con IA orientada a datos, actualmente completada hasta Sprint 1. Este repositorio es un monorepo con backend Spring Boot, frontend Angular, PostgreSQL con pgvector y dobles de prueba deterministas. La especificacion principal es [`AI_DATA_CHAT_PROMPT.md`](AI_DATA_CHAT_PROMPT.md).
 
-> Alcance actual: infraestructura, límites arquitectónicos, estado de bootstrap y fakes. No hay registro, login, chat funcional, proveedores reales, RAG ni integración remota con Data Platform MCP. Esas capacidades pertenecen a sprints posteriores.
+> Alcance actual: infraestructura, identidad, registro, primer administrador, sesiones, roles y administracion de usuarios. No hay chat funcional, proveedores reales, RAG ni integracion remota con Data Platform MCP. Esas capacidades pertenecen a sprints posteriores.
 
 ## Componentes
 
-- `backend/`: monolito modular Java 21 con arquitectura hexagonal, Actuator, Flyway y adaptadores fake.
-- `frontend/`: shell Angular en español que consulta el estado de bootstrap.
+- `backend/`: monolito modular Java 21 con arquitectura hexagonal, Spring Security, Spring Session JDBC, Actuator, Flyway y adaptadores fake.
+- `frontend/`: aplicacion Angular en espanol con flujos de acceso y panel administrativo.
 - `deployment/nginx/`: hosting estático, proxy de `/api`, configuración preparada para SSE y headers de seguridad.
 - `test-support/fake-mcp/`: servidor contractual WireMock con únicamente `health_check` y `hello_world`.
 - `docs/`: arquitectura, seguridad, integraciones y ADRs.
@@ -48,13 +48,21 @@ curl --fail http://localhost:8080/api/system/status
 docker compose ps
 ```
 
+Al entrar por primera vez, la UI solicita crear la cuenta inicial. La base de datos asigna `ADMIN`
+atomicamente a una sola cuenta, incluso ante registros concurrentes. Los registros posteriores son
+`USER`. Para cerrar el registro publico despues del bootstrap:
+
+```dotenv
+ALLOW_PUBLIC_REGISTRATION=false
+```
+
 Para añadir el MCP contractual de pruebas:
 
 ```bash
 docker compose -f compose.yaml -f compose.dev.yaml up --build --wait
 ```
 
-El backend continúa en modo fake durante Sprint 0. El contenedor WireMock permite validar el contrato por separado y nunca toca una base de datos real.
+El backend continua usando LLM y MCP fake en Sprint 1. El contenedor WireMock permite validar el contrato por separado y nunca toca una base de datos real.
 
 Para detener el entorno sin borrar datos:
 
@@ -71,7 +79,7 @@ cd backend
 ./mvnw -B -ntp verify
 ```
 
-Incluye pruebas unitarias de fakes, reglas ArchUnit y una prueba Testcontainers que aplica Flyway sobre PostgreSQL/pgvector real.
+Incluye pruebas unitarias de fakes, reglas ArchUnit y pruebas Testcontainers sobre PostgreSQL/pgvector real para migraciones, identidad y concurrencia del primer administrador.
 
 Frontend:
 
@@ -84,18 +92,23 @@ npm run test:ci
 npm run build
 ```
 
-La prueba de navegador está preparada con `npm run e2e`; requiere instalar el navegador de Playwright. La integración continua replica formato, lint, pruebas, builds y auditoría de dependencias con severidad alta.
+Las pruebas de navegador de registro inicial y login se ejecutan con `npm run e2e`; requieren instalar Chromium mediante Playwright. La integracion continua replica formato, lint, pruebas, builds y auditoria de dependencias con severidad alta.
 
 ## Configuración
 
-`.env.example` contiene sólo marcadores. Las variables de identidad, cifrado, uploads y rondas de tools están documentadas para mantener el contrato de despliegue, pero su comportamiento funcional no se implementa en Sprint 0.
+`.env.example` contiene solo marcadores. Las variables de identidad y sesiones ya son funcionales; cifrado, uploads y rondas de tools siguen reservadas para sus sprints.
 
 Las integraciones se ejecutan con `APP_INTEGRATIONS_MODE=fake`. No se aceptan credenciales ni se invocan APIs LLM pagadas.
+
+En produccion deben configurarse `SESSION_COOKIE_SECURE=true` y `CSRF_COOKIE_SECURE=true`, servir
+la aplicacion exclusivamente por HTTPS y conservar el proxy mismo-origen. Consulta
+[Identidad](docs/identity.md) y [Seguridad](docs/security.md).
 
 ## Documentación
 
 - [Arquitectura](docs/architecture.md)
 - [Seguridad](docs/security.md)
+- [Identidad y API](docs/identity.md)
 - [Proveedores](docs/providers.md)
 - [Integración MCP](docs/mcp-integration.md)
 - [RAG](docs/rag.md)
@@ -105,4 +118,4 @@ Las integraciones se ejecutan con `APP_INTEGRATIONS_MODE=fake`. No se aceptan cr
 
 ## Estado del roadmap
 
-Sprint 0 está implementado. Sprint 1 (identidad y usuarios) permanece bloqueado hasta aprobación explícita del propietario del proyecto.
+Sprint 0 y Sprint 1 estan implementados. Sprint 2 (proveedores y modelos) no debe comenzar sin aprobacion explicita del propietario del proyecto.

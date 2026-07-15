@@ -1,90 +1,27 @@
 <mat-toolbar class="topbar">
-  <a class="brand" href="/" aria-label="AI Data Chat, inicio">
+  <a class="brand" routerLink="/home" aria-label="AI Data Chat, inicio">
     <span class="brand__mark" aria-hidden="true">AD</span>
     <span>AI Data Chat</span>
   </a>
   <span class="spacer"></span>
-  <span class="sprint">Sprint 0 · Bootstrap</span>
+
+  @if (auth.currentUser(); as user) {
+    @if (user.role === 'ADMIN') {
+      <a mat-button routerLink="/admin/users">Usuarios</a>
+    }
+    <span class="identity">{{ user.displayName }}</span>
+    <button mat-stroked-button type="button" [disabled]="loggingOut()" (click)="logout()">
+      Cerrar sesion
+    </button>
+  } @else {
+    <span class="sprint">Sprint 1 · Identidad</span>
+  }
 </mat-toolbar>
 
-<main class="shell">
-  <section class="hero" aria-labelledby="page-title">
-    <p class="eyebrow">PLATAFORMA DE DATOS E IA</p>
-    <h1 id="page-title">Base técnica lista para crecer por sprints</h1>
-    <p>
-      Esta pantalla sólo verifica el bootstrap. Identidad, proveedores reales, chat, MCP real y RAG
-      se implementarán en sus sprints aprobados.
-    </p>
-  </section>
+@if (backendUnavailable()) {
+  <div class="backend-alert" role="alert">
+    El backend no esta disponible. Revisa los contenedores y vuelve a cargar la pagina.
+  </div>
+}
 
-  @if (loading()) {
-    <section class="loading" aria-live="polite">
-      <mat-spinner diameter="36"></mat-spinner>
-      <span>Consultando el backend…</span>
-    </section>
-  } @else if (status(); as current) {
-    <section class="status-grid" aria-label="Estado del bootstrap">
-      <mat-card appearance="outlined">
-        <mat-card-header>
-          <mat-card-title>Backend</mat-card-title>
-          <mat-card-subtitle>{{ current.application }}</mat-card-subtitle>
-        </mat-card-header>
-        <mat-card-content>
-          <span class="status status--up">UP</span>
-          <dl>
-            <div>
-              <dt>Versión</dt>
-              <dd>{{ current.version }}</dd>
-            </div>
-            <div>
-              <dt>Modo</dt>
-              <dd>{{ current.mode }}</dd>
-            </div>
-          </dl>
-        </mat-card-content>
-      </mat-card>
-
-      <mat-card appearance="outlined">
-        <mat-card-header>
-          <mat-card-title>Proveedor LLM</mat-card-title>
-          <mat-card-subtitle>{{ current.llmProvider.displayName }}</mat-card-subtitle>
-        </mat-card-header>
-        <mat-card-content>
-          <span [class]="statusClass(current.llmProvider.state)">
-            {{ current.llmProvider.state }}
-          </span>
-          <p class="disclaimer">FAKE determinista; no consume APIs externas ni genera cargos.</p>
-        </mat-card-content>
-      </mat-card>
-
-      <mat-card appearance="outlined">
-        <mat-card-header>
-          <mat-card-title>MCP</mat-card-title>
-          <mat-card-subtitle>Contrato falso acotado</mat-card-subtitle>
-        </mat-card-header>
-        <mat-card-content>
-          <span [class]="statusClass(current.mcp.state)">{{ current.mcp.state }}</span>
-          <dl>
-            <div>
-              <dt>Protocolo</dt>
-              <dd>{{ current.mcp.protocolVersion }}</dd>
-            </div>
-            <div>
-              <dt>Contrato</dt>
-              <dd>{{ current.mcp.contractVersion }}</dd>
-            </div>
-          </dl>
-          <p class="disclaimer">{{ current.mcp.detail }}</p>
-        </mat-card-content>
-      </mat-card>
-    </section>
-  } @else if (error()) {
-    <mat-card class="error-card" appearance="outlined" aria-live="assertive">
-      <mat-card-title>Backend no disponible</mat-card-title>
-      <mat-card-content>
-        <p>Comprueba PostgreSQL, el backend y el proxy local. El frontend sigue operativo.</p>
-        <button mat-stroked-button type="button" (click)="reload()">Reintentar</button>
-      </mat-card-content>
-    </mat-card>
-  }
-</main>
+<router-outlet />

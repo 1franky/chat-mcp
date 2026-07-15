@@ -8,8 +8,9 @@
   position: sticky;
   top: 0;
   z-index: 10;
+  gap: 0.45rem;
   border-bottom: 1px solid rgba(21, 54, 74, 0.12);
-  background: rgba(248, 251, 252, 0.92);
+  background: rgba(248, 251, 252, 0.94);
   backdrop-filter: blur(14px);
 }
 
@@ -38,138 +39,34 @@
   flex: 1;
 }
 
-.sprint {
+.sprint,
+.identity {
   color: #42606f;
   font-size: 0.82rem;
   font-weight: 500;
 }
 
-.shell {
-  width: min(1120px, calc(100% - 2rem));
-  margin: 0 auto;
-  padding: clamp(3rem, 7vw, 6rem) 0;
+.identity {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.hero {
-  max-width: 760px;
-  margin-bottom: 2.5rem;
-}
-
-.hero h1 {
-  max-width: 700px;
-  margin: 0.35rem 0 1rem;
-  font-size: clamp(2.1rem, 5vw, 4.2rem);
-  font-weight: 650;
-  letter-spacing: -0.045em;
-  line-height: 1.02;
-}
-
-.hero p:not(.eyebrow) {
-  max-width: 680px;
-  color: #4a6170;
-  font-size: 1.05rem;
-  line-height: 1.65;
-}
-
-.eyebrow {
-  color: #087482;
-  font-size: 0.76rem;
-  font-weight: 750;
-  letter-spacing: 0.14em;
-}
-
-.loading {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  color: #4a6170;
-}
-
-.status-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-}
-
-mat-card {
-  border-color: rgba(21, 54, 74, 0.14);
-  background: rgba(255, 255, 255, 0.76);
-}
-
-mat-card-content {
-  padding-top: 1rem;
-}
-
-.status {
-  display: inline-flex;
-  padding: 0.3rem 0.6rem;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 750;
-  letter-spacing: 0.07em;
-}
-
-.status--up {
-  background: #d9f4e8;
-  color: #095b3e;
-}
-
-.status--degraded {
+.backend-alert {
+  padding: 0.75rem 1rem;
   background: #fff0c7;
-  color: #714c00;
+  color: #624400;
+  text-align: center;
 }
 
-.status--down {
-  background: #ffe0df;
-  color: #862724;
-}
-
-dl {
-  margin: 1rem 0 0;
-}
-
-dl div {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.45rem 0;
-  border-bottom: 1px solid rgba(21, 54, 74, 0.08);
-}
-
-dt {
-  color: #607481;
-}
-
-dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  text-align: right;
-}
-
-.disclaimer {
-  color: #607481;
-  font-size: 0.84rem;
-  line-height: 1.5;
-}
-
-.error-card {
-  max-width: 560px;
-  padding: 1rem;
-}
-
-@media (max-width: 800px) {
-  .status-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 520px) {
+@media (max-width: 640px) {
+  .identity,
   .sprint {
     display: none;
   }
 
-  .shell {
-    width: min(100% - 1.25rem, 1120px);
-    padding-top: 2.5rem;
+  .brand > span:last-child {
+    display: none;
   }
 }

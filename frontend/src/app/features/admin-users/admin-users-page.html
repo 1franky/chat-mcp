@@ -1,0 +1,124 @@
+<main class="admin-shell">
+  <section class="heading" aria-labelledby="users-title">
+    <p class="eyebrow">ADMINISTRACION</p>
+    <h1 id="users-title">Usuarios</h1>
+    <p>
+      Las altas administrativas siempre nacen con rol USER. Un cambio de rol invalida las sesiones
+      activas del usuario afectado.
+    </p>
+  </section>
+
+  @if (error()) {
+    <p class="page-error" role="alert">{{ error() }}</p>
+  }
+
+  <div class="admin-grid">
+    <mat-card appearance="outlined" class="create-card">
+      <mat-card-header>
+        <mat-card-title>Crear usuario</mat-card-title>
+        <mat-card-subtitle>Se asignara el rol USER</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <form [formGroup]="createForm" (ngSubmit)="createUser()">
+          <mat-form-field appearance="outline">
+            <mat-label>Nombre visible</mat-label>
+            <input matInput formControlName="displayName" autocomplete="off" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Correo</mat-label>
+            <input matInput formControlName="email" type="email" autocomplete="off" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Contrasena temporal</mat-label>
+            <input
+              matInput
+              formControlName="password"
+              type="password"
+              autocomplete="new-password"
+            />
+          </mat-form-field>
+          <button mat-flat-button type="submit" [disabled]="saving()">
+            {{ saving() ? 'Creando…' : 'Crear usuario' }}
+          </button>
+        </form>
+      </mat-card-content>
+    </mat-card>
+
+    <section class="users-panel" aria-label="Lista de usuarios">
+      @if (loading()) {
+        <div class="loading" aria-live="polite">
+          <mat-spinner diameter="34"></mat-spinner>
+          <span>Cargando usuarios…</span>
+        </div>
+      } @else if (page(); as currentPage) {
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th>Rol</th>
+                <th>Estado</th>
+                <th><span class="visually-hidden">Acciones</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (user of currentPage.users; track user.id) {
+                <tr>
+                  <td>
+                    <strong>{{ user.displayName }}</strong>
+                    <span>{{ user.email }}</span>
+                  </td>
+                  <td>
+                    <span class="role">{{ user.role }}</span>
+                  </td>
+                  <td>{{ user.active ? 'Activo' : 'Inactivo' }}</td>
+                  <td class="actions">
+                    @if (user.active) {
+                      <button mat-button type="button" (click)="changeRole(user)">
+                        {{ user.role === 'ADMIN' ? 'Cambiar a USER' : 'Promover a ADMIN' }}
+                      </button>
+                      <button
+                        mat-button
+                        class="danger"
+                        type="button"
+                        (click)="requestDeactivation(user)"
+                      >
+                        {{
+                          deactivateConfirmation() === user.id ? 'Confirmar baja' : 'Dar de baja'
+                        }}
+                      </button>
+                    }
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="4">No hay usuarios.</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <nav class="pagination" aria-label="Paginacion de usuarios">
+          <button
+            mat-stroked-button
+            type="button"
+            [disabled]="currentPage.page === 0"
+            (click)="loadPage(currentPage.page - 1)"
+          >
+            Anterior
+          </button>
+          <span>Pagina {{ currentPage.page + 1 }}</span>
+          <button
+            mat-stroked-button
+            type="button"
+            [disabled]="!hasNextPage()"
+            (click)="loadPage(currentPage.page + 1)"
+          >
+            Siguiente
+          </button>
+        </nav>
+      }
+    </section>
+  </div>
+</main>
