@@ -1,5 +1,6 @@
 # Tareas
 
+
 Actualizado: 2026-07-15.
 
 ## Sprint 0 — Descubrimiento y bootstrap
