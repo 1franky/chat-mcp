@@ -1,10 +1,10 @@
 <main class="home-shell">
   <section class="hero" aria-labelledby="home-title">
-    <p class="eyebrow">SPRINT 2 · PROVEEDORES Y MODELOS</p>
+    <p class="eyebrow">SPRINT 3 · CONVERSACIONES Y STREAMING</p>
     <h1 id="home-title">Hola, {{ auth.currentUser()?.displayName }}</h1>
     <p>
-      Tu sesion segura esta activa. Ya puedes guardar conexiones cifradas, probarlas y sincronizar
-      sus modelos. Ninguna prueba automatizada consume APIs pagadas.
+      Tu sesion segura esta activa. Ya puedes mantener conversaciones, cambiar de modelo sin
+      reescribir el historial y detener respuestas en streaming.
     </p>
   </section>
 
@@ -17,6 +17,18 @@
       <mat-card-content>
         <span class="role">{{ auth.currentUser()?.role }}</span>
         <p>La sesion se persiste en PostgreSQL y la cookie no es accesible desde JavaScript.</p>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>Chat</mat-card-title>
+        <mat-card-subtitle>Streaming y persistencia</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <span class="fake">SSE</span>
+        <p>Conversa con el fake local o con cualquiera de tus proveedores configurados.</p>
+        <a mat-flat-button routerLink="/chat">Abrir chat</a>
       </mat-card-content>
     </mat-card>
 

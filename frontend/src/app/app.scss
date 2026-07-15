@@ -1,7 +1,7 @@
 :host {
   display: block;
   min-height: 100vh;
-  color: #17212b;
+  color: var(--text-primary);
 }
 
 .topbar {
@@ -9,8 +9,8 @@
   top: 0;
   z-index: 10;
   gap: 0.45rem;
-  border-bottom: 1px solid rgba(21, 54, 74, 0.12);
-  background: rgba(248, 251, 252, 0.94);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--topbar-background);
   backdrop-filter: blur(14px);
 }
 
@@ -29,7 +29,7 @@
   height: 2.15rem;
   place-items: center;
   border-radius: 0.7rem;
-  background: #075e68;
+  background: var(--brand);
   color: white;
   font-size: 0.76rem;
   letter-spacing: 0.08em;
@@ -41,7 +41,7 @@
 
 .sprint,
 .identity {
-  color: #42606f;
+  color: var(--text-secondary);
   font-size: 0.82rem;
   font-weight: 500;
 }
@@ -60,9 +60,14 @@
   text-align: center;
 }
 
+.theme-toggle {
+  min-width: auto;
+}
+
 @media (max-width: 640px) {
   .identity,
-  .sprint {
+  .sprint,
+  .theme-toggle span {
     display: none;
   }
 

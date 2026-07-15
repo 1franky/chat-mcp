@@ -2,9 +2,14 @@ package com.aidatachat.adapters.out.provider;
 
 import com.aidatachat.application.exception.ProviderCommunicationException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.Flow;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import org.reactivestreams.Subscription;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -12,6 +17,8 @@ import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
+import reactor.core.publisher.BaseSubscriber;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 import tools.jackson.databind.JsonNode;
@@ -23,9 +30,11 @@ public final class ProviderHttpClient {
 
     private final WebClient webClient;
     private final Duration timeout;
+    private final int maxResponseBytes;
 
     public ProviderHttpClient(Duration timeout, int maxResponseBytes) {
         this.timeout = timeout;
+        this.maxResponseBytes = maxResponseBytes;
         HttpClient httpClient = HttpClient.create().followRedirect(false).responseTimeout(timeout);
         this.webClient =
                 WebClient.builder()
@@ -72,6 +81,73 @@ public final class ProviderHttpClient {
         } catch (RuntimeException exception) {
             throw normalizeNetworkFailure(exception);
         }
+    }
+
+    public Flow.Publisher<StreamFrame> postSse(
+            URI uri, Consumer<HttpHeaders> headers, JsonNode body) {
+        return postStream(uri, headers, body, MediaType.TEXT_EVENT_STREAM);
+    }
+
+    public Flow.Publisher<StreamFrame> postNdjson(
+            URI uri, Consumer<HttpHeaders> headers, JsonNode body) {
+        return postStream(uri, headers, body, MediaType.APPLICATION_NDJSON);
+    }
+
+    private Flow.Publisher<StreamFrame> postStream(
+            URI uri, Consumer<HttpHeaders> headers, JsonNode body, MediaType acceptedMediaType) {
+        AtomicLong bytesRead = new AtomicLong();
+        Flux<StreamFrame> frames =
+                webClient
+                        .post()
+                        .uri(uri)
+                        .headers(headers)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(acceptedMediaType)
+                        .bodyValue(body)
+                        .exchangeToFlux(
+                                response -> {
+                                    String requestId =
+                                            requestId(response.headers().asHttpHeaders());
+                                    HttpStatusCode status = response.statusCode();
+                                    if (!status.is2xxSuccessful()) {
+                                        return response.releaseBody()
+                                                .thenMany(
+                                                        Flux.error(
+                                                                new ProviderCommunicationException(
+                                                                        errorCode(status.value()),
+                                                                        requestId,
+                                                                        retryable(status.value()),
+                                                                        null)));
+                                    }
+                                    return response.bodyToFlux(String.class)
+                                            .map(
+                                                    data -> {
+                                                        long total =
+                                                                bytesRead.addAndGet(
+                                                                        data.getBytes(
+                                                                                        StandardCharsets
+                                                                                                .UTF_8)
+                                                                                .length);
+                                                        if (total > maxResponseBytes) {
+                                                            throw new ProviderCommunicationException(
+                                                                    "PROVIDER_RESPONSE_TOO_LARGE",
+                                                                    requestId,
+                                                                    false,
+                                                                    null);
+                                                        }
+                                                        return new StreamFrame(data, requestId);
+                                                    });
+                                })
+                        .timeout(timeout)
+                        .onErrorMap(
+                                error ->
+                                        error instanceof ProviderCommunicationException
+                                                ? error
+                                                : normalizeNetworkFailure(
+                                                        error instanceof RuntimeException runtime
+                                                                ? runtime
+                                                                : new RuntimeException(error)));
+        return new ReactorFlowPublisher<>(frames);
     }
 
     private Mono<JsonResponse> readResponse(ClientResponse response) {
@@ -133,4 +209,60 @@ public final class ProviderHttpClient {
     }
 
     public record JsonResponse(JsonNode body, String requestId) {}
+
+    public record StreamFrame(String data, String requestId) {}
+
+    private static final class ReactorFlowPublisher<T> implements Flow.Publisher<T> {
+
+        private final Flux<T> flux;
+
+        private ReactorFlowPublisher(Flux<T> flux) {
+            this.flux = flux;
+        }
+
+        @Override
+        public void subscribe(Flow.Subscriber<? super T> subscriber) {
+            Objects.requireNonNull(subscriber, "subscriber is required");
+            flux.subscribe(
+                    new BaseSubscriber<>() {
+                        @Override
+                        protected void hookOnSubscribe(Subscription subscription) {
+                            subscriber.onSubscribe(
+                                    new Flow.Subscription() {
+                                        @Override
+                                        public void request(long count) {
+                                            if (count <= 0) {
+                                                cancel();
+                                                subscriber.onError(
+                                                        new IllegalArgumentException(
+                                                                "Demand must be positive"));
+                                                return;
+                                            }
+                                            subscription.request(count);
+                                        }
+
+                                        @Override
+                                        public void cancel() {
+                                            subscription.cancel();
+                                        }
+                                    });
+                        }
+
+                        @Override
+                        protected void hookOnNext(T value) {
+                            subscriber.onNext(value);
+                        }
+
+                        @Override
+                        protected void hookOnComplete() {
+                            subscriber.onComplete();
+                        }
+
+                        @Override
+                        protected void hookOnError(Throwable throwable) {
+                            subscriber.onError(throwable);
+                        }
+                    });
+        }
+    }
 }

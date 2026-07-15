@@ -1,13 +1,13 @@
 # AI Data Chat
 
-Aplicacion de chat con IA orientada a datos, actualmente completada hasta Sprint 2. Este repositorio es un monorepo con backend Spring Boot, frontend Angular, PostgreSQL con pgvector y dobles de prueba deterministas. La especificacion principal es [`AI_DATA_CHAT_PROMPT.md`](AI_DATA_CHAT_PROMPT.md).
+Aplicacion de chat con IA orientada a datos, actualmente completada hasta Sprint 3. Este repositorio es un monorepo con backend Spring Boot, frontend Angular, PostgreSQL con pgvector y dobles de prueba deterministas. La especificacion principal es [`AI_DATA_CHAT_PROMPT.md`](AI_DATA_CHAT_PROMPT.md).
 
-> Alcance actual: infraestructura, identidad, usuarios, conexiones LLM cifradas, prueba de proveedor, catalogo y seleccion predeterminada de modelos. No hay conversaciones, streaming de chat, RAG ni integracion remota con Data Platform MCP; esas capacidades pertenecen a sprints posteriores.
+> Alcance actual: infraestructura, identidad, usuarios, conexiones LLM cifradas y chat persistente con streaming/cancelacion. MCP sigue siendo fake y de solo lectura; tool calling, la conexion remota con Data Platform MCP y RAG pertenecen a sprints posteriores.
 
 ## Componentes
 
-- `backend/`: monolito modular Java 21 con arquitectura hexagonal, seguridad, persistencia y adaptadores de proveedor tras puertos propios.
-- `frontend/`: aplicacion Angular en espanol con identidad, administracion y configuracion de proveedores/modelos.
+- `backend/`: monolito modular Java 21 con arquitectura hexagonal, seguridad, conversaciones y adaptadores LLM tras puertos propios.
+- `frontend/`: aplicacion Angular en espanol con identidad, administracion, proveedores y experiencia completa de chat.
 - `deployment/nginx/`: hosting estático, proxy de `/api`, configuración preparada para SSE y headers de seguridad.
 - `test-support/fake-mcp/`: servidor contractual WireMock con únicamente `health_check` y `hello_world`.
 - `docs/`: arquitectura, seguridad, integraciones y ADRs.
@@ -17,7 +17,7 @@ flowchart LR
     U["Navegador"] -->|":3000, red chat-ingress"| F["chat-frontend / Nginx"]
     F -->|"/api, red chat-internal"| B["chat-backend"]
     B -->|"JDBC, red chat-internal"| P["chat-postgres + pgvector"]
-    B -.->|"Sprint futuro, red ai-platform"| M["Data Platform MCP"]
+    B -.->|"Sprint 4, red ai-platform"| M["Data Platform MCP"]
     FM["fake-mcp, sólo compose.dev"] -.->|"contrato de prueba"| B
 ```
 
@@ -67,6 +67,23 @@ El MCP continua en modo fake. Para LLM, la UI permite configurar el fake determi
 OpenAI, Anthropic, BytePlus, OpenAI-compatible y Ollama. Ninguna prueba automatizada consume APIs
 pagadas; probar una conexion real sólo ocurre por accion explícita del usuario.
 
+## Chat y streaming
+
+Abre <http://localhost:3000/chat>. Cada conversacion y cada consulta se filtran por el usuario
+autenticado. La UI permite crear, buscar, renombrar y eliminar conversaciones, cambiar el modelo
+para mensajes futuros, regenerar, copiar y detener una respuesta. Los mensajes anteriores conservan
+el snapshot de proveedor/modelo, uso, `finishReason` y request ID que corresponda.
+
+El backend normaliza streaming de OpenAI Responses, Anthropic Messages, BytePlus/OpenAI Chat
+Completions, proveedores compatibles y Ollama. Para una prueba local sin coste configura el proveedor
+`FAKE`, sincroniza `fake-chat-v1` y selecciónalo como predeterminado. La respuesta llega por SSE y el
+mensaje parcial se persiste como `CANCELLED` si el usuario detiene la generación o el navegador se
+desconecta.
+
+MCP se muestra como `FAKE` en Sprint 3. La configuracion `MCP_BASE_URL` ya documentada no activa un
+cliente remoto todavía; esa integracion, el discovery de tools y sus tarjetas se reservan para Sprint 4.
+Consulta [Chat y streaming](docs/chat.md) para la API y el ciclo de estados.
+
 ## Proveedores y modelos
 
 Abre <http://localhost:3000/settings/providers> después de iniciar sesion. Cada conexion pertenece
@@ -99,9 +116,9 @@ cd backend
 ./mvnw -B -ntp verify
 ```
 
-Incluye pruebas unitarias de cifrado, SSRF, fakes y contratos HTTP, reglas ArchUnit y pruebas
-Testcontainers sobre PostgreSQL/pgvector real para migraciones, identidad, concurrencia y ownership
-de proveedores.
+Incluye pruebas unitarias de cifrado, SSRF, fakes y contratos HTTP/streaming, reglas ArchUnit y
+pruebas Testcontainers sobre PostgreSQL/pgvector real para migraciones, identidad, concurrencia,
+ownership de proveedores/conversaciones, persistencia de uso y cancelacion parcial.
 
 Frontend:
 
@@ -114,7 +131,9 @@ npm run test:ci
 npm run build
 ```
 
-Las pruebas de navegador de registro inicial y login se ejecutan con `npm run e2e`; requieren instalar Chromium mediante Playwright. La integracion continua replica formato, lint, pruebas, builds y auditoria de dependencias con severidad alta.
+Las pruebas de navegador de registro inicial, login, proveedor fake y chat SSE se ejecutan con
+`npm run e2e`; requieren instalar Chromium mediante `npx playwright install chromium`. La
+integracion continua replica formato, lint, pruebas, builds y auditoria de dependencias con severidad alta.
 
 ## Configuración
 
@@ -122,7 +141,8 @@ Las pruebas de navegador de registro inicial y login se ejecutan con `npm run e2
 32 bytes y no debe persistirse en Git. `CREDENTIAL_KEY_VERSION` queda almacenada con cada secreto.
 
 `APP_INTEGRATIONS_MODE=fake` conserva el proveedor y MCP deterministas. Las credenciales reales sólo
-se usan cuando su propietario solicita una prueba o sincronizacion desde la UI.
+se descifran en backend durante una accion explícita de su propietario, incluida una generacion.
+`CHAT_*` limita timeout, heartbeat, historial enviado y longitud máxima de respuesta.
 
 En produccion deben configurarse `SESSION_COOKIE_SECURE=true` y `CSRF_COOKIE_SECURE=true`, servir
 la aplicacion exclusivamente por HTTPS y conservar el proxy mismo-origen. Consulta
@@ -134,6 +154,7 @@ la aplicacion exclusivamente por HTTPS y conservar el proxy mismo-origen. Consul
 - [Seguridad](docs/security.md)
 - [Identidad y API](docs/identity.md)
 - [Proveedores](docs/providers.md)
+- [Chat y streaming](docs/chat.md)
 - [Integración MCP](docs/mcp-integration.md)
 - [RAG](docs/rag.md)
 - [Decisiones ADR](docs/adr/README.md)
@@ -142,5 +163,5 @@ la aplicacion exclusivamente por HTTPS y conservar el proxy mismo-origen. Consul
 
 ## Estado del roadmap
 
-Sprint 0, Sprint 1 y Sprint 2 estan implementados. Sprint 3 (conversaciones, mensajes y streaming)
+Sprint 0, Sprint 1, Sprint 2 y Sprint 3 estan implementados. Sprint 4 (MCP remoto y tool calling)
 no debe comenzar sin aprobacion explicita del propietario del proyecto.

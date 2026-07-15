@@ -4,16 +4,21 @@ import com.aidatachat.application.exception.ProviderCommunicationException;
 import com.aidatachat.application.port.out.LlmProviderPort.ProviderClientConfiguration;
 import com.aidatachat.domain.model.CapabilityAvailability;
 import com.aidatachat.domain.model.DiscoveredProviderModel;
+import com.aidatachat.domain.model.LlmChatRequest;
+import com.aidatachat.domain.model.LlmChunk;
 import com.aidatachat.domain.model.ProviderCapabilityProfile;
 import com.aidatachat.domain.model.ProviderProbeResult;
 import com.aidatachat.domain.model.ProviderType;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Flow;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
 public final class BytePlusProviderAdapter extends AbstractHttpLlmProviderAdapter {
+
+    private static final int DEFAULT_MAX_TOKENS = 4_096;
 
     private static final ProviderCapabilityProfile CAPABILITIES =
             new ProviderCapabilityProfile(
@@ -43,6 +48,19 @@ public final class BytePlusProviderAdapter extends AbstractHttpLlmProviderAdapte
     }
 
     @Override
+    public Flow.Publisher<LlmChunk> streamChat(
+            ProviderClientConfiguration configuration, char[] credential, LlmChatRequest request) {
+        String baseUrl = requireRegion(configuration);
+        String token = secret(credential);
+        return ProviderStreamingSupport.map(
+                http.postSse(
+                        ProviderUris.append(baseUrl, "/chat/completions"),
+                        headers -> headers.setBearerAuth(token),
+                        ProviderStreamingSupport.chatCompletionsBody(request, DEFAULT_MAX_TOKENS)),
+                ProviderStreamingSupport::parseChatCompletions);
+    }
+
+    @Override
     public List<DiscoveredProviderModel> discoverModels(
             ProviderClientConfiguration configuration, char[] credential) {
         return List.of();
@@ -67,11 +85,7 @@ public final class BytePlusProviderAdapter extends AbstractHttpLlmProviderAdapte
 
     private String invoke(
             ProviderClientConfiguration configuration, char[] credential, String modelId) {
-        String baseUrl = regionBaseUrls.get(configuration.region());
-        if (baseUrl == null) {
-            throw new ProviderCommunicationException(
-                    "PROVIDER_REGION_NOT_ALLOWED", null, false, null);
-        }
+        String baseUrl = requireRegion(configuration);
         ObjectNode body = JsonNodeFactory.instance.objectNode();
         body.put("model", modelId);
         body.put("max_tokens", 1);
@@ -83,5 +97,14 @@ public final class BytePlusProviderAdapter extends AbstractHttpLlmProviderAdapte
                         headers -> headers.setBearerAuth(secret(credential)),
                         body);
         return response.requestId();
+    }
+
+    private String requireRegion(ProviderClientConfiguration configuration) {
+        String baseUrl = regionBaseUrls.get(configuration.region());
+        if (baseUrl == null) {
+            throw new ProviderCommunicationException(
+                    "PROVIDER_REGION_NOT_ALLOWED", null, false, null);
+        }
+        return baseUrl;
     }
 }

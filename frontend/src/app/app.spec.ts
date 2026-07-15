@@ -6,13 +6,15 @@ import { App } from './app';
 
 describe('App', () => {
   beforeEach(async () => {
+    localStorage.clear();
+    delete document.documentElement.dataset['theme'];
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     }).compileComponents();
   });
 
-  it('shows the Sprint 2 provider shell', () => {
+  it('shows the Sprint 3 chat shell and theme control', () => {
     const fixture = TestBed.createComponent(App);
     const http = TestBed.inject(HttpTestingController);
 
@@ -20,7 +22,15 @@ describe('App', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('AI Data Chat');
-    expect(fixture.nativeElement.textContent).toContain('Sprint 2 · Proveedores');
+    expect(fixture.nativeElement.textContent).toContain('Sprint 3 · Chat');
+    expect(fixture.nativeElement.textContent).toContain('Oscuro');
+
+    const toggle = fixture.nativeElement.querySelector('.theme-toggle') as HTMLButtonElement;
+    toggle.click();
+    fixture.detectChanges();
+    expect(document.documentElement.dataset['theme']).toBe('dark');
+    expect(toggle.getAttribute('aria-label')).toBe('Activar modo claro');
+    expect(localStorage.getItem('ai-data-chat-theme')).toBe('dark');
     http.verify();
   });
 

@@ -1,7 +1,31 @@
 html {
+  --brand: #075e68;
+  --brand-muted: #178793;
+  --surface-canvas: #f7fafb;
+  --surface-sidebar: #f0f5f6;
+  --surface-raised: #ffffff;
+  --surface-input: #ffffff;
+  --surface-selected: #e4eff1;
+  --text-primary: #17212b;
+  --text-secondary: #526b78;
+  --border-subtle: rgba(21, 54, 74, 0.14);
+  --border-strong: #c8d6dc;
+  --topbar-background: rgba(248, 251, 252, 0.94);
+  --user-avatar: #526b78;
+  --user-bubble: #e8f1f3;
+  --code-surface: #edf2f4;
+  --badge-neutral: #edf2f4;
+  --success-surface: #dff5ec;
+  --success-border: #90c8b6;
+  --success-text: #12634b;
+  --danger-surface: #ffe8e8;
+  --danger-border: #e3a9a9;
+  --danger-text: #872a2a;
+  --shadow-soft: rgba(32, 58, 72, 0.12);
   color-scheme: light;
   background:
-    radial-gradient(circle at 12% 8%, rgba(55, 173, 178, 0.13), transparent 30rem), #f7fafb;
+    radial-gradient(circle at 12% 8%, rgba(55, 173, 178, 0.13), transparent 30rem),
+    var(--surface-canvas);
   font-family:
     Inter,
     ui-sans-serif,
@@ -12,10 +36,58 @@ html {
     sans-serif;
 }
 
+html[data-theme='dark'] {
+  --brand: #29a7b2;
+  --brand-muted: #52bec7;
+  --surface-canvas: #0d1419;
+  --surface-sidebar: #111c22;
+  --surface-raised: #152128;
+  --surface-input: #18262e;
+  --surface-selected: #1d3038;
+  --text-primary: #e8f1f4;
+  --text-secondary: #9eb2bc;
+  --border-subtle: rgba(191, 220, 230, 0.14);
+  --border-strong: #38505b;
+  --topbar-background: rgba(15, 24, 30, 0.95);
+  --user-avatar: #68818d;
+  --user-bubble: #23343d;
+  --code-surface: #0b1115;
+  --badge-neutral: #293a43;
+  --success-surface: #173b31;
+  --success-border: #2f6858;
+  --success-text: #8ee0c4;
+  --danger-surface: #442326;
+  --danger-border: #744247;
+  --danger-text: #ffb5b8;
+  --shadow-soft: rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(41, 167, 178, 0.12), transparent 30rem),
+    var(--surface-canvas);
+}
+
 body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
+  color: var(--text-primary);
+  background: transparent;
+}
+
+html[data-theme='dark'] :where(mat-card, .form-card, .models-panel, .capabilities) {
+  border-color: var(--border-subtle) !important;
+  background: var(--surface-raised) !important;
+  color: var(--text-primary) !important;
+}
+
+html[data-theme='dark'] :where(.connection-item, .user-item, .auth-card) {
+  border-color: var(--border-subtle) !important;
+  background: var(--surface-raised) !important;
+  color: var(--text-primary) !important;
+}
+
+html[data-theme='dark'] :where(.heading p, .hero p, mat-card-content p) {
+  color: var(--text-secondary) !important;
 }
 
 button,

@@ -20,6 +20,16 @@ export const routes: Routes = [
       import('./features/providers/providers-page').then((module) => module.ProvidersPage),
   },
   {
+    path: 'chat',
+    canActivate: [authenticatedGuard],
+    loadComponent: () => import('./features/chat/chat-page').then((module) => module.ChatPage),
+  },
+  {
+    path: 'chat/:conversationId',
+    canActivate: [authenticatedGuard],
+    loadComponent: () => import('./features/chat/chat-page').then((module) => module.ChatPage),
+  },
+  {
     path: 'admin/users',
     canActivate: [authenticatedGuard, adminGuard],
     loadComponent: () =>

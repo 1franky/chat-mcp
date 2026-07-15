@@ -4,6 +4,8 @@ import com.aidatachat.application.exception.ProviderCommunicationException;
 import com.aidatachat.application.port.out.LlmProviderPort.ProviderClientConfiguration;
 import com.aidatachat.domain.model.CapabilityAvailability;
 import com.aidatachat.domain.model.DiscoveredProviderModel;
+import com.aidatachat.domain.model.LlmChatRequest;
+import com.aidatachat.domain.model.LlmChunk;
 import com.aidatachat.domain.model.ProviderCapabilityProfile;
 import com.aidatachat.domain.model.ProviderProbeResult;
 import com.aidatachat.domain.model.ProviderType;
@@ -11,6 +13,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Flow;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.util.UriUtils;
 import tools.jackson.databind.JsonNode;
@@ -19,6 +22,7 @@ public final class AnthropicProviderAdapter extends AbstractHttpLlmProviderAdapt
 
     static final String DEFAULT_BASE_URL = "https://api.anthropic.com/v1";
     private static final String API_VERSION = "2023-06-01";
+    private static final int DEFAULT_MAX_TOKENS = 4_096;
     private static final ProviderCapabilityProfile CAPABILITIES =
             new ProviderCapabilityProfile(
                     CapabilityAvailability.SUPPORTED,
@@ -54,6 +58,18 @@ public final class AnthropicProviderAdapter extends AbstractHttpLlmProviderAdapt
     public List<DiscoveredProviderModel> discoverModels(
             ProviderClientConfiguration configuration, char[] credential) {
         return listModels(credential).models();
+    }
+
+    @Override
+    public Flow.Publisher<LlmChunk> streamChat(
+            ProviderClientConfiguration configuration, char[] credential, LlmChatRequest request) {
+        String apiKey = secret(credential);
+        return ProviderStreamingSupport.map(
+                http.postSse(
+                        ProviderUris.append(baseUrl, "/messages"),
+                        headers(apiKey),
+                        ProviderStreamingSupport.anthropicBody(request, DEFAULT_MAX_TOKENS)),
+                ProviderStreamingSupport::parseAnthropic);
     }
 
     @Override
@@ -99,8 +115,12 @@ public final class AnthropicProviderAdapter extends AbstractHttpLlmProviderAdapt
     }
 
     private java.util.function.Consumer<HttpHeaders> headers(char[] credential) {
+        return headers(secret(credential));
+    }
+
+    private java.util.function.Consumer<HttpHeaders> headers(String credential) {
         return headers -> {
-            headers.set("x-api-key", secret(credential));
+            headers.set("x-api-key", credential);
             headers.set("anthropic-version", API_VERSION);
         };
     }

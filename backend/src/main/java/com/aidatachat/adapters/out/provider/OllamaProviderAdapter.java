@@ -4,12 +4,15 @@ import com.aidatachat.application.exception.ProviderCommunicationException;
 import com.aidatachat.application.port.out.LlmProviderPort.ProviderClientConfiguration;
 import com.aidatachat.domain.model.CapabilityAvailability;
 import com.aidatachat.domain.model.DiscoveredProviderModel;
+import com.aidatachat.domain.model.LlmChatRequest;
+import com.aidatachat.domain.model.LlmChunk;
 import com.aidatachat.domain.model.ProviderCapabilityProfile;
 import com.aidatachat.domain.model.ProviderProbeResult;
 import com.aidatachat.domain.model.ProviderType;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Flow;
 import tools.jackson.databind.JsonNode;
 
 public final class OllamaProviderAdapter extends AbstractHttpLlmProviderAdapter {
@@ -40,6 +43,19 @@ public final class OllamaProviderAdapter extends AbstractHttpLlmProviderAdapter 
     @Override
     public ProviderCapabilityProfile capabilities(ProviderClientConfiguration configuration) {
         return CAPABILITIES;
+    }
+
+    @Override
+    public Flow.Publisher<LlmChunk> streamChat(
+            ProviderClientConfiguration configuration, char[] credential, LlmChatRequest request) {
+        URI base = URI.create(configuration.baseUrl());
+        destinationPolicy.validateCustomDestination(base);
+        return ProviderStreamingSupport.map(
+                http.postNdjson(
+                        ProviderUris.append(configuration.baseUrl(), "/api/chat"),
+                        headers -> {},
+                        ProviderStreamingSupport.ollamaBody(request)),
+                ProviderStreamingSupport::parseOllama);
     }
 
     @Override

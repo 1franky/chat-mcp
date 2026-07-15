@@ -8,7 +8,9 @@ import com.aidatachat.domain.model.LlmChatRequest;
 import com.aidatachat.domain.model.LlmChunk;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Flow;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 class FakeLlmProviderAdapterTest {
@@ -35,7 +37,7 @@ class FakeLlmProviderAdapterTest {
     }
 
     @Test
-    void streamsAStableDeterministicResponseWithoutExternalCalls() {
+    void streamsAStableDeterministicResponseWithoutExternalCalls() throws InterruptedException {
         LlmChatRequest request =
                 new LlmChatRequest(
                         FakeLlmProviderAdapter.MODEL_ID, List.of(new ChatMessage("user", "hola")));
@@ -43,6 +45,7 @@ class FakeLlmProviderAdapterTest {
 
         adapter.streamChat(request).subscribe(subscriber);
 
+        assertThat(subscriber.finished.await(2, TimeUnit.SECONDS)).isTrue();
         assertThat(subscriber.failure).isNull();
         assertThat(subscriber.completed).isTrue();
         assertThat(subscriber.chunks)
@@ -64,6 +67,7 @@ class FakeLlmProviderAdapterTest {
     private static final class CollectingSubscriber implements Flow.Subscriber<LlmChunk> {
 
         private final List<LlmChunk> chunks = new ArrayList<>();
+        private final CountDownLatch finished = new CountDownLatch(1);
         private Throwable failure;
         private boolean completed;
 
@@ -80,11 +84,13 @@ class FakeLlmProviderAdapterTest {
         @Override
         public void onError(Throwable throwable) {
             failure = throwable;
+            finished.countDown();
         }
 
         @Override
         public void onComplete() {
             completed = true;
+            finished.countDown();
         }
     }
 }

@@ -4,12 +4,15 @@ import com.aidatachat.application.exception.ProviderCommunicationException;
 import com.aidatachat.application.port.out.LlmProviderPort.ProviderClientConfiguration;
 import com.aidatachat.domain.model.CapabilityAvailability;
 import com.aidatachat.domain.model.DiscoveredProviderModel;
+import com.aidatachat.domain.model.LlmChatRequest;
+import com.aidatachat.domain.model.LlmChunk;
 import com.aidatachat.domain.model.ProviderCapabilityProfile;
 import com.aidatachat.domain.model.ProviderProbeResult;
 import com.aidatachat.domain.model.ProviderType;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Flow;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
@@ -41,6 +44,30 @@ public final class OpenAiCompatibleProviderAdapter extends AbstractHttpLlmProvid
                 configuration.modelsPath() == null
                         ? CapabilityAvailability.UNSUPPORTED
                         : CapabilityAvailability.SUPPORTED);
+    }
+
+    @Override
+    public Flow.Publisher<LlmChunk> streamChat(
+            ProviderClientConfiguration configuration, char[] credential, LlmChatRequest request) {
+        String token = secret(credential);
+        if (configuration.responsesPath() != null) {
+            return ProviderStreamingSupport.map(
+                    http.postSse(
+                            customUri(configuration, configuration.responsesPath()),
+                            headers -> headers.setBearerAuth(token),
+                            ProviderStreamingSupport.responsesBody(request)),
+                    ProviderStreamingSupport::parseOpenAiResponses);
+        }
+        String chatPath =
+                configuration.chatCompletionsPath() == null
+                        ? "/chat/completions"
+                        : configuration.chatCompletionsPath();
+        return ProviderStreamingSupport.map(
+                http.postSse(
+                        customUri(configuration, chatPath),
+                        headers -> headers.setBearerAuth(token),
+                        ProviderStreamingSupport.chatCompletionsBody(request, 0)),
+                ProviderStreamingSupport::parseChatCompletions);
     }
 
     @Override

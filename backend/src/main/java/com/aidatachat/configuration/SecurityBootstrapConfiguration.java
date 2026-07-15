@@ -123,7 +123,8 @@ public class SecurityBootstrapConfiguration {
                                         .requestMatchers(
                                                 "/api/auth/me",
                                                 "/api/auth/logout",
-                                                "/api/providers/**")
+                                                "/api/providers/**",
+                                                "/api/conversations/**")
                                         .authenticated()
                                         .anyRequest()
                                         .denyAll())

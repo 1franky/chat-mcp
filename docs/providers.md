@@ -1,11 +1,12 @@
 # Proveedores LLM
 
-## Estado de Sprint 2
+## Estado de Sprint 3
 
 Cada usuario administra sus propias conexiones mediante `ProviderManagementUseCase`. El dominio y
 los casos de uso no dependen de SDKs externos: los clientes HTTP, JPA y el cifrado son adaptadores
 intercambiables. Sprint 2 permite guardar, editar, eliminar, probar y sincronizar conexiones y
-modelos; la generación y el streaming de conversaciones empiezan en Sprint 3.
+modelos. Sprint 3 añade generacion streaming mediante un gateway que primero resuelve ownership,
+modelo y capacidades, y sólo después descifra la credencial en backend.
 
 | Tipo | Base y autenticación | Prueba | Descubrimiento |
 | --- | --- | --- | --- |
@@ -16,9 +17,11 @@ modelos; la generación y el streaming de conversaciones empiezan en Sprint 3.
 | `OLLAMA` | Base URL interna, sin clave por defecto | `GET /api/tags` | `GET /api/tags` |
 | `FAKE` | En proceso, sin red ni clave | Determinista | `fake-chat-v1` |
 
-OpenAI queda preparado para que Sprint 3 use Responses API. Anthropic queda preparado para
-Messages API y BytePlus para su API `/api/v3`; este sprint no envía conversaciones. Las pruebas de
-contrato levantan un servidor HTTP local y nunca invocan APIs pagadas.
+El chat usa OpenAI Responses (`response.output_text.delta`), Anthropic Messages SSE,
+BytePlus/OpenAI-compatible Chat Completions SSE y Ollama NDJSON. OpenAI-compatible también puede
+usar Responses según su ruta configurada. Todos se traducen a un stream interno con contenido,
+terminacion, uso, razon y request ID opcionales. Las pruebas de contrato levantan un servidor HTTP
+local y nunca invocan APIs pagadas.
 
 Fuentes oficiales verificadas el 2026-07-15:
 
@@ -28,6 +31,10 @@ Fuentes oficiales verificadas el 2026-07-15:
 - [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages/create)
 - [BytePlus compatible con OpenAI](https://docs.byteplus.com/api/docs/ModelArk/1330626)
 - [Ollama: listar modelos](https://docs.ollama.com/api/tags)
+- [OpenAI Responses streaming](https://developers.openai.com/api/reference/resources/responses/methods/create)
+- [Anthropic Messages streaming](https://platform.claude.com/docs/en/build-with-claude/streaming)
+- [BytePlus Chat Completions](https://docs.byteplus.com/en/docs/ModelArk/1494384)
+- [Ollama Chat](https://docs.ollama.com/api/chat)
 
 ## Credenciales
 

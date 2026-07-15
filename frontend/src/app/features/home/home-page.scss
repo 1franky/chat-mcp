@@ -23,12 +23,12 @@
 
 .hero p:not(.eyebrow),
 mat-card-content p {
-  color: #4a6170;
+  color: var(--text-secondary);
   line-height: 1.6;
 }
 
 .eyebrow {
-  color: #087482;
+  color: var(--brand-muted);
   font-size: 0.76rem;
   font-weight: 750;
   letter-spacing: 0.14em;
@@ -41,8 +41,8 @@ mat-card-content p {
 }
 
 mat-card {
-  border-color: rgba(21, 54, 74, 0.14);
-  background: rgba(255, 255, 255, 0.8);
+  border-color: var(--border-subtle);
+  background: var(--surface-raised);
 }
 
 mat-card-content {

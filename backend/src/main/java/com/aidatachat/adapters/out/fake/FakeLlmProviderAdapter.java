@@ -16,10 +16,13 @@ import com.aidatachat.domain.model.ProviderType;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Flow;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class FakeLlmProviderAdapter implements LlmProviderPort, ModelCatalogPort {
 
     public static final String MODEL_ID = "fake-chat-v1";
+    private static final long CHUNK_DELAY_MILLIS = 35;
 
     private static final ProviderCapabilities CAPABILITIES =
             new ProviderCapabilities(true, true, false, false, false, false, true);
@@ -86,7 +89,7 @@ public final class FakeLlmProviderAdapter implements LlmProviderPort, ModelCatal
                 List.of(
                         new LlmChunk("Respuesta ", false),
                         new LlmChunk("simulada por ", false),
-                        new LlmChunk("fake-deterministic.", true)));
+                        new LlmChunk("fake-deterministic.", true, 2, 7, "stop", "fake-request")));
     }
 
     private static final class FinitePublisher implements Flow.Publisher<LlmChunk> {
@@ -108,9 +111,9 @@ public final class FakeLlmProviderAdapter implements LlmProviderPort, ModelCatal
 
         private final Flow.Subscriber<? super LlmChunk> subscriber;
         private final List<LlmChunk> chunks;
-        private int index;
-        private boolean cancelled;
-        private boolean completed;
+        private final AtomicLong demand = new AtomicLong();
+        private final AtomicBoolean cancelled = new AtomicBoolean();
+        private final AtomicBoolean started = new AtomicBoolean();
 
         private FiniteSubscription(
                 Flow.Subscriber<? super LlmChunk> subscriber, List<LlmChunk> chunks) {
@@ -119,30 +122,79 @@ public final class FakeLlmProviderAdapter implements LlmProviderPort, ModelCatal
         }
 
         @Override
-        public synchronized void request(long count) {
-            if (cancelled || completed) {
+        public void request(long count) {
+            if (cancelled.get()) {
                 return;
             }
             if (count <= 0) {
-                cancelled = true;
+                cancelled.set(true);
                 subscriber.onError(new IllegalArgumentException("Demand must be positive"));
                 return;
             }
-
-            long remaining = count;
-            while (!cancelled && remaining > 0 && index < chunks.size()) {
-                subscriber.onNext(chunks.get(index++));
-                remaining--;
+            demand.updateAndGet(current -> addDemand(current, count));
+            synchronized (this) {
+                notifyAll();
             }
-            if (!cancelled && index == chunks.size()) {
-                completed = true;
-                subscriber.onComplete();
+            if (started.compareAndSet(false, true)) {
+                Thread.ofVirtual().name("fake-llm-stream").start(this::emit);
             }
         }
 
         @Override
-        public synchronized void cancel() {
-            cancelled = true;
+        public void cancel() {
+            cancelled.set(true);
+            synchronized (this) {
+                notifyAll();
+            }
+        }
+
+        private void emit() {
+            for (LlmChunk chunk : chunks) {
+                if (!awaitDemand()) {
+                    return;
+                }
+                try {
+                    Thread.sleep(CHUNK_DELAY_MILLIS);
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    cancel();
+                    return;
+                }
+                if (cancelled.get()) {
+                    return;
+                }
+                subscriber.onNext(chunk);
+            }
+            if (!cancelled.get()) {
+                subscriber.onComplete();
+            }
+        }
+
+        private boolean awaitDemand() {
+            synchronized (this) {
+                while (!cancelled.get() && demand.get() == 0) {
+                    try {
+                        wait();
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                        cancel();
+                        return false;
+                    }
+                }
+            }
+            if (cancelled.get()) {
+                return false;
+            }
+            demand.updateAndGet(current -> current == Long.MAX_VALUE ? current : current - 1);
+            return true;
+        }
+
+        private long addDemand(long current, long increment) {
+            if (current == Long.MAX_VALUE || increment == Long.MAX_VALUE) {
+                return Long.MAX_VALUE;
+            }
+            long updated = current + increment;
+            return updated < 0 ? Long.MAX_VALUE : updated;
         }
     }
 }
