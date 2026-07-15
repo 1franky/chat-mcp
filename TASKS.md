@@ -53,6 +53,10 @@ Actualizado: 2026-07-15.
 ## Fuera del Sprint 2
 
 - [ ] Sprint 3 — conversaciones, mensajes, streaming, cancelacion y UI completa de chat. Requiere aprobacion explicita.
-- [ ] Sprint 4+ — MCP remoto, RAG y demas roadmap definido en la especificacion.
+- [ ] Añadir en Sprint 3 un boton accesible para alternar entre el tema claro existente y un nuevo tema oscuro, con preferencia persistente y respeto inicial de `prefers-color-scheme`.
+- [ ] Sprint 4 — implementar el cliente MCP Streamable HTTP, discovery de tools, tool calling multi-proveedor, tarjetas de tools y pruebas de contrato/seguridad.
+- [ ] Configurar en Sprint 4 la conexion backend-a-backend con Data Platform MCP mediante `MCP_BASE_URL`, `MCP_ENDPOINT`, version de protocolo y major de contrato, conservando el servicio fuera del navegador y sin modificar el proyecto MCP.
+- [ ] Mostrar en Sprint 4 el estado `UP`/`DEGRADED`/`DOWN`, el contrato negociado y las funciones disponibles del MCP en un panel de solo lectura para el usuario.
+- [ ] Sprint 5+ — RAG y demas roadmap definido en la especificacion.
 
 No se debe iniciar ninguna tarea fuera de Sprint 2 sin aprobacion del propietario.
