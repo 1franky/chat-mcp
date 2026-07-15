@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: ai-data-chat-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/ai_data_chat}
+    username: ${SPRING_DATASOURCE_USERNAME:ai_data_chat}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${DB_MAX_POOL_SIZE:10}
+      minimum-idle: ${DB_MIN_IDLE:1}
+      connection-timeout: 5000
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  mvc:
+    problemdetails:
+      enabled: true
+  session:
+    jdbc:
+      initialize-schema: never
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  forward-headers-strategy: framework
+  error:
+    include-message: never
+    include-stacktrace: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      group:
+        readiness:
+          include: readinessState,db
+        liveness:
+          include: livenessState
+  health:
+    readinessstate:
+      enabled: true
+    livenessstate:
+      enabled: true
+
+info:
+  application:
+    name: AI Data Chat
+    version: "@project.version@"
+    sprint: 0
+
+app:
+  integrations:
+    mode: ${APP_INTEGRATIONS_MODE:fake}
+  mcp:
+    base-url: ${MCP_BASE_URL:http://data-platform-mcp:8000}
+    endpoint: ${MCP_ENDPOINT:/mcp}
+    protocol-version: ${MCP_PROTOCOL_VERSION:2025-11-25}
+    required-contract-major: ${MCP_CONTRACT_MAJOR:1}

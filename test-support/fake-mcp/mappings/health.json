@@ -1,0 +1,19 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/health"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "status": "ok",
+      "server_version": "0.0.0-fake",
+      "contract_version": "1.0.0",
+      "fake": true
+    }
+  }
+}

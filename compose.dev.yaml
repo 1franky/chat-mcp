@@ -1,0 +1,32 @@
+services:
+  chat-backend:
+    environment:
+      APP_INTEGRATIONS_MODE: fake
+      MCP_BASE_URL: http://fake-mcp:8080
+
+  fake-mcp:
+    image: wiremock/wiremock:3.13.2@sha256:0d4ecb3e4dc8213fd7a4d37d6a78f6e6b553a6d2e15bd51b0999781282ac61b3
+    user: "1000:1000"
+    command:
+      - --global-response-templating
+      - --disable-gzip
+    volumes:
+      - ./test-support/fake-mcp/mappings:/home/wiremock/mappings:ro
+    networks:
+      - ai-platform
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl --fail --silent http://127.0.0.1:8080/health >/dev/null
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped

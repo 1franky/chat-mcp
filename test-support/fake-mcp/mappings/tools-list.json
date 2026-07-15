@@ -1,0 +1,22 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/mcp",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.method == 'tools/list')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":{{jsonPath request.body '$.id'}},\"result\":{\"tools\":[{\"name\":\"health_check\",\"description\":\"Returns deterministic fake health\",\"inputSchema\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}},{\"name\":\"hello_world\",\"description\":\"Returns a deterministic greeting\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"maxLength\":100}},\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}}]}}",
+    "transformers": [
+      "response-template"
+    ]
+  }
+}

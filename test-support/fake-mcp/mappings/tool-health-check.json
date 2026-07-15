@@ -1,0 +1,22 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/mcp",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.method == 'tools/call' && @.params.name == 'health_check')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":{{jsonPath request.body '$.id'}},\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"Fake MCP is healthy\"}],\"structuredContent\":{\"status\":\"ok\",\"contract_version\":\"1.0.0\",\"fake\":true},\"isError\":false}}",
+    "transformers": [
+      "response-template"
+    ]
+  }
+}
