@@ -38,7 +38,9 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
-@SpringBootTest
+@SpringBootTest(
+        properties =
+                "app.providers.credential-master-key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
 @Testcontainers(disabledWithoutDocker = true)
 @SuppressWarnings("deprecation")
 class IdentityIntegrationTest {

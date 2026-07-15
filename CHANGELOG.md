@@ -4,6 +4,25 @@ Todos los cambios relevantes del proyecto se documentan aquí. El formato sigue 
 
 ## [Unreleased]
 
+### Added — Sprint 2
+
+- Conexiones LLM aisladas por usuario para OpenAI, Anthropic, BytePlus, OpenAI-compatible, Ollama y fake.
+- Cifrado AES-256-GCM con nonce aleatorio, AAD, pista enmascarada y version de clave.
+- Prueba de conexion, descubrimiento best-effort, modelo manual/configurado y seleccion predeterminada.
+- Capacidades triestado y origen `DISCOVERED`, `MANUAL` o `CONFIGURED` sin inferencias por nombre.
+- UI Angular responsive para gestionar conexiones, estados, capacidades y modelos.
+- Migracion Flyway `V3` y pruebas de ownership, cifrado, SSRF y contratos HTTP locales.
+
+### Security — Sprint 2
+
+- Allowlist de hosts para destinos configurables, HTTP interno explícito, bloqueo link-local y redirects desactivados.
+- Timeout y limite de bytes para respuestas externas; errores normalizados sin cuerpos ni secretos.
+- La clave maestra es obligatoria fuera de PostgreSQL y ninguna API devuelve material cifrado.
+
+### Changed — Sprint 2
+
+- El puerto host predeterminado de la interfaz web cambia de `8080` a `3000`.
+
 ### Added — Sprint 1
 
 - Registro publico configurable y bootstrap atomico del primer `ADMIN`.
@@ -43,6 +62,6 @@ Todos los cambios relevantes del proyecto se documentan aquí. El formato sigue 
 - Endpoints no incluidos en el bootstrap denegados por Spring Security.
 - Sin secretos reales ni llamadas a proveedores pagados.
 
-### Not implemented after Sprint 1
+### Not implemented after Sprint 2
 
-- Chat, proveedores reales, cifrado de credenciales, MCP remoto y RAG.
+- Conversaciones, streaming de chat, tool calling, MCP remoto y RAG.

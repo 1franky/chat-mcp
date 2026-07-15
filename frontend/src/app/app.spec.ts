@@ -12,7 +12,7 @@ describe('App', () => {
     }).compileComponents();
   });
 
-  it('shows the Sprint 1 identity shell', () => {
+  it('shows the Sprint 2 provider shell', () => {
     const fixture = TestBed.createComponent(App);
     const http = TestBed.inject(HttpTestingController);
 
@@ -20,7 +20,7 @@ describe('App', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('AI Data Chat');
-    expect(fixture.nativeElement.textContent).toContain('Sprint 1 · Identidad');
+    expect(fixture.nativeElement.textContent).toContain('Sprint 2 · Proveedores');
     http.verify();
   });
 

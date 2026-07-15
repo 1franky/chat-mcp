@@ -13,7 +13,9 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
-@SpringBootTest
+@SpringBootTest(
+        properties =
+                "app.providers.credential-master-key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
 @Testcontainers(disabledWithoutDocker = true)
 @SuppressWarnings("deprecation")
 class PostgresMigrationTest {
@@ -51,6 +53,14 @@ class PostgresMigrationTest {
                                 + "AND table_name = 'security_audit_event') "
                                 + "ORDER BY table_schema, table_name",
                         String.class);
+        List<String> sprintTwoTables =
+                jdbcTemplate.queryForList(
+                        "SELECT table_schema || '.' || table_name "
+                                + "FROM information_schema.tables "
+                                + "WHERE table_schema = 'chat' "
+                                + "AND table_name IN ('provider_connection', 'provider_model') "
+                                + "ORDER BY table_name",
+                        String.class);
 
         assertThat(vectorExtensions).isOne();
         assertThat(schemas).containsExactly("audit", "chat", "identity", "rag");
@@ -60,5 +70,7 @@ class PostgresMigrationTest {
                         "identity.app_user",
                         "identity.spring_session",
                         "identity.spring_session_attributes");
+        assertThat(sprintTwoTables)
+                .containsExactly("chat.provider_connection", "chat.provider_model");
     }
 }

@@ -2,7 +2,7 @@
 
 ## Contexto y alcance
 
-Sprint 1 mantiene un monolito modular desplegable. Los limites internos permiten cambiar persistencia e integraciones sin acoplar dominio y casos de uso a Spring, SDKs de proveedores o MCP.
+Sprint 2 mantiene un monolito modular desplegable. Los limites internos permiten cambiar persistencia e integraciones sin acoplar dominio y casos de uso a Spring, SDKs de proveedores o MCP.
 
 ```mermaid
 flowchart TB
@@ -15,6 +15,8 @@ flowchart TB
     FAKE --> OUT
     JPA["adapters.out.persistence: JPA/JDBC"] --> OUT
     SEC["adapters.out.security: Argon2/sesiones"] --> OUT
+    PROVIDERS["adapters.out.provider: HTTP y SSRF"] --> OUT
+    CIPHER["adapters.out.security: AES-256-GCM"] --> OUT
 ```
 
 Reglas verificadas con ArchUnit:
@@ -27,10 +29,11 @@ Reglas verificadas con ArchUnit:
 
 `LlmProviderPort`, `ModelCatalogPort`, `McpGateway`, `EmbeddingProviderPort`, `DocumentStoragePort`, `VectorSearchPort`, `CredentialCipherPort`, `ConversationRepository`, `DocumentRepository` y `AuditRepository`.
 
-Sprint 1 anade `UserAccountRepository`, `IdentityTransactionPort`, `PasswordHashPort` y
-`SessionInvalidationPort`, con adaptadores PostgreSQL/Spring Security. Los puertos de proveedores
-y MCP conservan exclusivamente adaptadores fake; las demas fronteras siguen sin capacidad
-funcional.
+Sprint 1 anadio `UserAccountRepository`, `IdentityTransactionPort`, `PasswordHashPort` y
+`SessionInvalidationPort`. Sprint 2 activa `LlmProviderPort`, `CredentialCipherPort` y
+`ProviderConnectionRepository` con adaptadores OpenAI, Anthropic, BytePlus, OpenAI-compatible,
+Ollama y fake. MCP conserva exclusivamente el adaptador fake; chat, documentos y vectores siguen
+sin capacidad funcional.
 
 ## Contenedores y redes
 
@@ -57,8 +60,8 @@ flowchart LR
 
 ## Datos
 
-Flyway crea la extension `vector`, los namespaces delimitados y, en Sprint 1, tablas de usuarios,
-sesiones JDBC y auditoria de seguridad. Los schemas `chat` y `rag` siguen vacios. JPA usa
+Flyway crea la extension `vector`, namespaces delimitados, identidad, sesiones, auditoria y las
+tablas `chat.provider_connection` y `chat.provider_model`. El schema `rag` sigue vacio. JPA usa
 `ddl-auto=validate`; Flyway es la unica autoridad de esquema.
 
 ## Flujo disponible
@@ -80,5 +83,6 @@ sequenceDiagram
     WEB-->>UI: perfil publico + cookie HttpOnly
 ```
 
-Tambien estan disponibles login/logout, perfil y administracion de usuarios. El endpoint de estado
-de Sprint 0 se conserva. Ningun flujo transmite chats o llama servicios externos pagados.
+Tambien estan disponibles login/logout, perfil, administracion de usuarios y gestion de conexiones
+y modelos propios. El endpoint de estado se conserva. Ningun flujo transmite chats; las pruebas
+usan dobles y servidores locales, y una prueba real sólo ocurre por accion explícita del usuario.

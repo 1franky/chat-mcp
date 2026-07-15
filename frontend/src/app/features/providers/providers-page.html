@@ -1,0 +1,243 @@
+<main class="providers-shell">
+  <section class="heading" aria-labelledby="providers-title">
+    <p class="eyebrow">CONFIGURACION</p>
+    <div>
+      <h1 id="providers-title">Proveedores y modelos</h1>
+      <p>
+        Las credenciales se cifran en el backend y nunca vuelven al navegador. El catalogo y las
+        capacidades se muestran sin inferir soporte a partir del nombre del modelo.
+      </p>
+    </div>
+    <button mat-stroked-button type="button" (click)="newProvider()">Nueva conexion</button>
+  </section>
+
+  @if (error()) {
+    <p class="message message--error" role="alert">{{ error() }}</p>
+  }
+  @if (notice()) {
+    <p class="message message--success" role="status">{{ notice() }}</p>
+  }
+
+  <div class="providers-grid">
+    <section class="connection-list" aria-label="Conexiones configuradas">
+      @if (loading()) {
+        <div class="loading" aria-live="polite">
+          <mat-spinner diameter="32"></mat-spinner>
+          <span>Cargando conexiones…</span>
+        </div>
+      } @else {
+        @for (provider of providers(); track provider.id) {
+          <button
+            class="connection-item"
+            [class.connection-item--selected]="selected()?.id === provider.id"
+            type="button"
+            (click)="edit(provider)"
+          >
+            <span class="connection-item__top">
+              <strong>{{ provider.displayName }}</strong>
+              <span class="state" [attr.data-state]="provider.state">{{ provider.state }}</span>
+            </span>
+            <span>{{ provider.providerType }}</span>
+            <small>
+              {{ provider.credentialMasked || 'Sin credencial' }}
+              @if (provider.defaultModelId) {
+                · {{ provider.defaultModelId }}
+              }
+            </small>
+          </button>
+        } @empty {
+          <div class="empty">
+            <strong>No hay conexiones.</strong>
+            <span>Crea una conexion real o usa el fake determinista.</span>
+          </div>
+        }
+      }
+    </section>
+
+    <section class="workspace">
+      <mat-card appearance="outlined" class="form-card">
+        <mat-card-header>
+          <mat-card-title>{{ editing() ? 'Editar conexion' : 'Nueva conexion' }}</mat-card-title>
+          <mat-card-subtitle>
+            @if (selected()?.credentialMasked; as masked) {
+              Credencial guardada: {{ masked }}. Deja la clave vacia para conservarla.
+            } @else {
+              Los campos dependen del contrato del proveedor.
+            }
+          </mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <form [formGroup]="form" (ngSubmit)="save()">
+            <div class="form-grid">
+              <mat-form-field appearance="outline">
+                <mat-label>Nombre visible</mat-label>
+                <input matInput formControlName="displayName" autocomplete="off" />
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Tipo</mat-label>
+                <mat-select formControlName="providerType">
+                  @for (type of providerTypes; track type.value) {
+                    <mat-option [value]="type.value">{{ type.label }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+
+              @if (needsApiKey(form.controls.providerType.value)) {
+                <mat-form-field appearance="outline" class="form-grid__wide">
+                  <mat-label>API key</mat-label>
+                  <input
+                    matInput
+                    formControlName="apiKey"
+                    type="password"
+                    autocomplete="new-password"
+                  />
+                  <mat-hint>Nunca se muestra nuevamente.</mat-hint>
+                </mat-form-field>
+              }
+
+              @if (needsBaseUrl(form.controls.providerType.value)) {
+                <mat-form-field appearance="outline" class="form-grid__wide">
+                  <mat-label>Base URL</mat-label>
+                  <input
+                    matInput
+                    formControlName="baseUrl"
+                    placeholder="http://ollama:11434"
+                    autocomplete="url"
+                  />
+                  <mat-hint>El host debe estar autorizado por el operador.</mat-hint>
+                </mat-form-field>
+              }
+
+              @if (form.controls.providerType.value === 'BYTEPLUS') {
+                <mat-form-field appearance="outline">
+                  <mat-label>Region</mat-label>
+                  <input matInput formControlName="region" autocomplete="off" />
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Model ID o endpoint ID</mat-label>
+                  <input matInput formControlName="configuredModelId" autocomplete="off" />
+                </mat-form-field>
+              }
+
+              @if (form.controls.providerType.value === 'OPENAI_COMPATIBLE') {
+                <mat-form-field appearance="outline">
+                  <mat-label>Ruta de modelos</mat-label>
+                  <input matInput formControlName="modelsPath" autocomplete="off" />
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Modelo configurado</mat-label>
+                  <input matInput formControlName="configuredModelId" autocomplete="off" />
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Ruta Responses</mat-label>
+                  <input matInput formControlName="responsesPath" autocomplete="off" />
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Ruta Chat Completions</mat-label>
+                  <input matInput formControlName="chatCompletionsPath" autocomplete="off" />
+                </mat-form-field>
+              }
+            </div>
+
+            <div class="form-actions">
+              <button mat-flat-button type="submit" [disabled]="saving()">
+                {{ saving() ? 'Guardando…' : editing() ? 'Guardar cambios' : 'Crear conexion' }}
+              </button>
+              @if (selected(); as provider) {
+                <button
+                  mat-stroked-button
+                  type="button"
+                  [disabled]="runningAction() !== null"
+                  (click)="testConnection(provider)"
+                >
+                  {{ actionRunning(provider, 'test') ? 'Probando…' : 'Probar conexion' }}
+                </button>
+                <button
+                  mat-stroked-button
+                  type="button"
+                  [disabled]="runningAction() !== null"
+                  (click)="synchronize(provider)"
+                >
+                  {{ actionRunning(provider, 'sync') ? 'Sincronizando…' : 'Sincronizar modelos' }}
+                </button>
+                <button
+                  mat-button
+                  class="danger"
+                  type="button"
+                  [disabled]="runningAction() !== null"
+                  (click)="remove(provider)"
+                >
+                  {{ deleteConfirmation() ? 'Confirmar eliminacion' : 'Eliminar' }}
+                </button>
+              }
+            </div>
+          </form>
+        </mat-card-content>
+      </mat-card>
+
+      @if (selected(); as provider) {
+        <section class="capabilities" aria-labelledby="capabilities-title">
+          <h2 id="capabilities-title">Capacidades del adaptador</h2>
+          <div class="badges">
+            @for (capability of capabilityEntries(provider.capabilities); track capability.label) {
+              <span class="capability" [attr.data-value]="capability.value">
+                {{ capability.label }} · {{ capability.value }}
+              </span>
+            }
+          </div>
+          <p>
+            Estas capacidades describen el adaptador. Las del modelo permanecen UNKNOWN hasta que el
+            proveedor publique metadata confiable.
+          </p>
+        </section>
+
+        <section class="models-panel" aria-labelledby="models-title">
+          <div class="models-heading">
+            <div>
+              <h2 id="models-title">Modelos</h2>
+              <p>Origen DISCOVERED, MANUAL o CONFIGURED y ultima validacion.</p>
+            </div>
+            <form class="manual-model" [formGroup]="manualModelForm" (ngSubmit)="addManualModel()">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Model ID manual</mat-label>
+                <input matInput formControlName="modelId" autocomplete="off" />
+              </mat-form-field>
+              <button mat-stroked-button type="submit" [disabled]="runningAction() !== null">
+                Validar y agregar
+              </button>
+            </form>
+          </div>
+
+          <div class="model-list">
+            @for (model of models(); track model.id) {
+              <article class="model-item">
+                <div>
+                  <strong>{{ model.displayName }}</strong>
+                  <code>{{ model.modelId }}</code>
+                </div>
+                <span class="origin">{{ model.origin }}</span>
+                @if (provider.defaultModelId === model.modelId) {
+                  <span class="default">Predeterminado</span>
+                } @else {
+                  <button
+                    mat-button
+                    type="button"
+                    [disabled]="runningAction() !== null"
+                    (click)="selectDefault(provider, model)"
+                  >
+                    Seleccionar
+                  </button>
+                }
+              </article>
+            } @empty {
+              <div class="empty empty--models">
+                No hay modelos. Sincroniza el catalogo o agrega un ID manual.
+              </div>
+            }
+          </div>
+        </section>
+      }
+    </section>
+  </div>
+</main>

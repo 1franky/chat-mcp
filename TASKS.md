@@ -35,9 +35,24 @@ Actualizado: 2026-07-15.
 - [x] Probar UI de registro/login, bootstrap inicial, guards, errores y panel administrativo.
 - [x] Mantener LLM/MCP en modo fake sin llamadas pagadas.
 
-## Fuera del Sprint 1
+## Sprint 2 — Proveedores y modelos
 
-- [ ] Sprint 2 — proveedores reales, catalogo y cifrado de credenciales. Requiere aprobacion explicita.
-- [ ] Sprint 3+ — chat, tools remotas, RAG y demás roadmap definido en la especificación.
+- [x] Crear migracion de conexiones y modelos con ownership, constraints e indices.
+- [x] Cifrar credenciales con AES-256-GCM, nonce aleatorio, AAD y version de clave.
+- [x] Ocultar claves, ciphertext y nonce en JSON, errores, logs y auditoria.
+- [x] Implementar adaptadores OpenAI, Anthropic, BytePlus, OpenAI-compatible, Ollama y fake.
+- [x] Implementar prueba de conexion y normalizacion segura de errores/request IDs.
+- [x] Implementar descubrimiento best-effort, modelo configurado/manual y seleccion predeterminada.
+- [x] Representar capacidades por adaptador/modelo como `SUPPORTED`, `UNSUPPORTED` o `UNKNOWN`.
+- [x] Aplicar allowlist SSRF, HTTPS por defecto, bloqueo link-local, redirects, timeouts y bytes.
+- [x] Probar cifrado, manipulacion, ownership, secretos ausentes, SSRF y contratos HTTP sin APIs reales.
+- [x] Crear UI responsive de proveedores/modelos con estados, acciones y errores recuperables.
+- [x] Cambiar el puerto host de despliegue de la interfaz web a `3000`.
+- [x] Actualizar README, CHANGELOG, documentos y ADR-0007.
 
-No se debe iniciar ninguna tarea fuera de Sprint 1 sin aprobacion del propietario.
+## Fuera del Sprint 2
+
+- [ ] Sprint 3 — conversaciones, mensajes, streaming, cancelacion y UI completa de chat. Requiere aprobacion explicita.
+- [ ] Sprint 4+ — MCP remoto, RAG y demas roadmap definido en la especificacion.
+
+No se debe iniciar ninguna tarea fuera de Sprint 2 sin aprobacion del propietario.

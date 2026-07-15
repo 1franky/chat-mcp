@@ -65,7 +65,7 @@ info:
   application:
     name: AI Data Chat
     version: "@project.version@"
-    sprint: 1
+    sprint: 2
 
 app:
   identity:
@@ -81,6 +81,16 @@ app:
         window: ${REGISTRATION_RATE_LIMIT_WINDOW:1h}
   integrations:
     mode: ${APP_INTEGRATIONS_MODE:fake}
+  providers:
+    credential-master-key: ${CREDENTIAL_MASTER_KEY:}
+    credential-key-version: ${CREDENTIAL_KEY_VERSION:1}
+    allowed-hosts: ${PROVIDER_ALLOWED_HOSTS:}
+    allowed-http-hosts: ${PROVIDER_ALLOWED_HTTP_HOSTS:}
+    http:
+      timeout: ${PROVIDER_HTTP_TIMEOUT:10s}
+      max-response-bytes: ${PROVIDER_MAX_RESPONSE_BYTES:1048576}
+    byteplus:
+      ap-southeast-1-base-url: https://ark.ap-southeast.bytepluses.com/api/v3
   mcp:
     base-url: ${MCP_BASE_URL:http://data-platform-mcp:8000}
     endpoint: ${MCP_ENDPOINT:/mcp}

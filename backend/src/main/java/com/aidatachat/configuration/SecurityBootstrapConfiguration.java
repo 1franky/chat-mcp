@@ -120,7 +120,10 @@ public class SecurityBootstrapConfiguration {
                                         .permitAll()
                                         .requestMatchers("/api/admin/**")
                                         .hasRole("ADMIN")
-                                        .requestMatchers("/api/auth/me", "/api/auth/logout")
+                                        .requestMatchers(
+                                                "/api/auth/me",
+                                                "/api/auth/logout",
+                                                "/api/providers/**")
                                         .authenticated()
                                         .anyRequest()
                                         .denyAll())

@@ -3,6 +3,9 @@ package com.aidatachat.web;
 import com.aidatachat.application.exception.DuplicateUserException;
 import com.aidatachat.application.exception.InvalidCredentialsException;
 import com.aidatachat.application.exception.LastAdministratorException;
+import com.aidatachat.application.exception.ProviderCommunicationException;
+import com.aidatachat.application.exception.ProviderConflictException;
+import com.aidatachat.application.exception.ProviderNotFoundException;
 import com.aidatachat.application.exception.RegistrationClosedException;
 import com.aidatachat.application.exception.UserNotFoundException;
 import java.net.URI;
@@ -57,13 +60,47 @@ public class ApiExceptionHandler {
                 "El registro publico no esta disponible.");
     }
 
-    @ExceptionHandler({DuplicateUserException.class, DataIntegrityViolationException.class})
-    ProblemDetail duplicateUser(Exception exception) {
+    @ExceptionHandler(DuplicateUserException.class)
+    ProblemDetail duplicateUser(DuplicateUserException exception) {
         return problem(
                 HttpStatus.CONFLICT,
                 "user-conflict",
                 "Usuario no disponible",
                 "No fue posible crear el usuario solicitado.");
+    }
+
+    @ExceptionHandler({ProviderConflictException.class, DataIntegrityViolationException.class})
+    ProblemDetail resourceConflict(Exception exception) {
+        return problem(
+                HttpStatus.CONFLICT,
+                "resource-conflict",
+                "Recurso no disponible",
+                "Ya existe un recurso con esos datos o fue modificado concurrentemente.");
+    }
+
+    @ExceptionHandler(ProviderNotFoundException.class)
+    ProblemDetail providerNotFound(ProviderNotFoundException exception) {
+        return problem(
+                HttpStatus.NOT_FOUND,
+                "provider-not-found",
+                "Proveedor no encontrado",
+                "La conexion solicitada no existe.");
+    }
+
+    @ExceptionHandler(ProviderCommunicationException.class)
+    ProblemDetail providerCommunication(ProviderCommunicationException exception) {
+        ProblemDetail problem =
+                problem(
+                        HttpStatus.BAD_GATEWAY,
+                        "provider-communication",
+                        "Proveedor no disponible",
+                        "No fue posible completar la operacion con el proveedor.");
+        problem.setProperty("providerCode", exception.code());
+        problem.setProperty("retryable", exception.retryable());
+        if (exception.providerRequestId() != null) {
+            problem.setProperty("providerRequestId", exception.providerRequestId());
+        }
+        return problem;
     }
 
     @ExceptionHandler(LastAdministratorException.class)

@@ -8,3 +8,4 @@ Los ADRs son inmutables una vez reemplazados: una decisión nueva debe enlazar y
 - [ADR-0004 — Topología Docker con ingreso y redes segmentadas](0004-docker-network-topology.md)
 - [ADR-0005 — Flyway y namespaces acotados](0005-flyway-schema-boundaries.md)
 - [ADR-0006 — Identidad, sesiones y bootstrap atomico](0006-identity-sessions-and-bootstrap.md)
+- [ADR-0007 — Credenciales por usuario y salida a proveedores](0007-provider-credentials-and-egress.md)

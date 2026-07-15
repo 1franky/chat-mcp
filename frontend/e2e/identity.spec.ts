@@ -63,6 +63,37 @@ test('logs in through a server-side session flow', async ({ page }) => {
   await expect(page.getByText(admin.email)).toBeVisible();
 });
 
+test('shows a safe provider catalog and verifies the fake connection', async ({ page }) => {
+  await page.route('**/api/auth/bootstrap', async (route) => {
+    await route.fulfill({ json: bootstrap(admin) });
+  });
+  await page.route('**/api/providers', async (route) => {
+    await route.fulfill({ json: [fakeProvider] });
+  });
+  await page.route(`**/api/providers/${fakeProvider.id}/models`, async (route) => {
+    await route.fulfill({ json: [] });
+  });
+  await page.route(`**/api/providers/${fakeProvider.id}/test`, async (route) => {
+    await route.fulfill({
+      json: {
+        success: true,
+        code: 'CONNECTION_OK',
+        message: 'Conexion verificada.',
+        providerRequestId: 'fake-request',
+        retryable: false,
+        testedAt: '2026-07-15T00:00:00Z',
+      },
+    });
+  });
+
+  await page.goto('/settings/providers');
+  await page.getByRole('button', { name: /Fake local/ }).click();
+  await page.getByRole('button', { name: 'Probar conexion' }).click();
+
+  await expect(page.getByText('Conexion verificada correctamente.')).toBeVisible();
+  await expect(page.getByText('Sin credencial')).toBeVisible();
+});
+
 function bootstrap(user: typeof admin | null) {
   return {
     bootstrapRequired: false,
@@ -71,3 +102,32 @@ function bootstrap(user: typeof admin | null) {
     user,
   };
 }
+
+const fakeProvider = {
+  id: 'f45f50c8-7fee-49ca-8e8c-a40bbf425f73',
+  displayName: 'Fake local',
+  providerType: 'FAKE',
+  baseUrl: null,
+  region: null,
+  modelsPath: null,
+  responsesPath: null,
+  chatCompletionsPath: null,
+  configuredModelId: null,
+  defaultModelId: null,
+  credentialMasked: null,
+  state: 'UP',
+  lastErrorCode: null,
+  lastTestedAt: '2026-07-15T00:00:00Z',
+  lastModelsSyncedAt: null,
+  capabilities: {
+    chat: 'SUPPORTED',
+    streaming: 'SUPPORTED',
+    toolCalling: 'UNSUPPORTED',
+    structuredOutput: 'UNSUPPORTED',
+    vision: 'UNSUPPORTED',
+    embeddings: 'UNSUPPORTED',
+    modelDiscovery: 'SUPPORTED',
+  },
+  createdAt: '2026-07-15T00:00:00Z',
+  updatedAt: '2026-07-15T00:00:00Z',
+};
