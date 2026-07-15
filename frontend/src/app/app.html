@@ -6,16 +6,35 @@
   <span class="spacer"></span>
 
   @if (auth.currentUser(); as user) {
+    <a mat-button routerLink="/chat">Chat</a>
     <a mat-button routerLink="/settings/providers">Proveedores</a>
     @if (user.role === 'ADMIN') {
       <a mat-button routerLink="/admin/users">Usuarios</a>
     }
     <span class="identity">{{ user.displayName }}</span>
+    <button
+      class="theme-toggle"
+      mat-button
+      type="button"
+      (click)="theme.toggle()"
+      [attr.aria-label]="theme.theme() === 'light' ? 'Activar modo oscuro' : 'Activar modo claro'"
+    >
+      {{ theme.theme() === 'light' ? '☾ Oscuro' : '☀ Claro' }}
+    </button>
     <button mat-stroked-button type="button" [disabled]="loggingOut()" (click)="logout()">
       Cerrar sesion
     </button>
   } @else {
-    <span class="sprint">Sprint 2 · Proveedores</span>
+    <button
+      class="theme-toggle"
+      mat-button
+      type="button"
+      (click)="theme.toggle()"
+      [attr.aria-label]="theme.theme() === 'light' ? 'Activar modo oscuro' : 'Activar modo claro'"
+    >
+      {{ theme.theme() === 'light' ? '☾ Oscuro' : '☀ Claro' }}
+    </button>
+    <span class="sprint">Sprint 3 · Chat</span>
   }
 </mat-toolbar>
 

@@ -1,0 +1,243 @@
+<main class="chat-shell" [class.chat-shell--collapsed]="sidebarCollapsed()">
+  <aside class="sidebar" aria-label="Conversaciones">
+    <div class="sidebar__header">
+      <button
+        class="sidebar-toggle"
+        type="button"
+        (click)="sidebarCollapsed.set(!sidebarCollapsed())"
+        [attr.aria-label]="sidebarCollapsed() ? 'Mostrar conversaciones' : 'Ocultar conversaciones'"
+      >
+        {{ sidebarCollapsed() ? '›' : '‹' }}
+      </button>
+      <button mat-flat-button type="button" [disabled]="generating()" (click)="newConversation()">
+        + Nuevo chat
+      </button>
+    </div>
+
+    <label class="search">
+      <span class="sr-only">Buscar por titulo</span>
+      <input type="search" [formControl]="searchControl" placeholder="Buscar conversaciones" />
+    </label>
+
+    <nav class="conversation-list" aria-label="Historial de conversaciones">
+      @if (loadingConversations()) {
+        <div class="sidebar-state"><mat-spinner diameter="24" /></div>
+      } @else if (!conversations().length) {
+        <p class="sidebar-state">Todavia no hay conversaciones.</p>
+      } @else {
+        @for (conversation of conversations(); track conversation.id) {
+          <button
+            type="button"
+            class="conversation-item"
+            [class.conversation-item--active]="activeConversation()?.id === conversation.id"
+            [disabled]="generating()"
+            (click)="openConversation(conversation)"
+          >
+            <strong>{{ conversation.title }}</strong>
+            <small>{{ conversation.modelId }}</small>
+          </button>
+        }
+      }
+    </nav>
+  </aside>
+
+  <section class="workspace">
+    <header class="chat-header">
+      <button
+        class="mobile-sidebar"
+        type="button"
+        (click)="sidebarCollapsed.set(!sidebarCollapsed())"
+        aria-label="Alternar conversaciones"
+      >
+        ☰
+      </button>
+      <div class="chat-heading">
+        @if (renaming()) {
+          <label>
+            <span class="sr-only">Titulo de la conversacion</span>
+            <input class="rename-input" maxlength="160" [formControl]="renameControl" />
+          </label>
+          <button mat-button type="button" (click)="saveRename()">Guardar</button>
+          <button mat-button type="button" (click)="renaming.set(false)">Cancelar</button>
+        } @else {
+          <div>
+            <h1>{{ activeConversation()?.title ?? 'Nuevo chat' }}</h1>
+            <p>Mensajes persistentes · historial aislado por usuario</p>
+          </div>
+        }
+      </div>
+      <div class="chat-actions">
+        @if (activeConversation() && !renaming()) {
+          <button mat-button type="button" [disabled]="generating()" (click)="startRename()">
+            Renombrar
+          </button>
+          <button
+            mat-button
+            class="danger"
+            type="button"
+            [disabled]="generating()"
+            (click)="removeConversation()"
+          >
+            {{ deleteConfirmation() ? 'Confirmar borrado' : 'Eliminar' }}
+          </button>
+        }
+      </div>
+    </header>
+
+    @if (error()) {
+      <div class="notice notice--error" role="alert">
+        <span>{{ error() }}</span>
+        <button type="button" (click)="error.set('')">Cerrar</button>
+      </div>
+    }
+    @if (notice()) {
+      <div class="notice notice--success" role="status">
+        <span>{{ notice() }}</span>
+        <button type="button" (click)="notice.set('')">Cerrar</button>
+      </div>
+    }
+
+    <div #messageViewport class="message-viewport" aria-live="polite">
+      @if (loadingConversation()) {
+        <div class="center-state">
+          <mat-spinner diameter="38" />
+          <p>Cargando conversacion…</p>
+        </div>
+      } @else if (!messages().length) {
+        <section class="empty-chat" aria-labelledby="empty-chat-title">
+          <span class="empty-chat__mark" aria-hidden="true">AD</span>
+          <h2 id="empty-chat-title">¿Que quieres analizar hoy?</h2>
+          <p>
+            Elige una conexion y un modelo. En este sprint el chat funciona sin MCP ni documentos;
+            puedes usar el proveedor fake para una prueba gratuita y determinista.
+          </p>
+          @if (!providers().length) {
+            <p class="empty-chat__warning">
+              Primero configura un proveedor y sincroniza al menos un modelo.
+            </p>
+          }
+        </section>
+      } @else {
+        <div class="message-list">
+          @for (message of messages(); track message.id) {
+            <article class="message" [attr.data-role]="message.role">
+              <div class="message__avatar" aria-hidden="true">
+                {{ message.role === 'USER' ? 'TU' : 'AI' }}
+              </div>
+              <div class="message__body">
+                @if (message.role === 'ASSISTANT') {
+                  <div class="markdown" [innerHTML]="markdown(message.content)"></div>
+                  @if (message.status === 'STREAMING') {
+                    <span class="stream-cursor" aria-label="Generando"></span>
+                  }
+                } @else {
+                  <p class="user-content">{{ message.content }}</p>
+                }
+
+                <footer class="message__meta">
+                  @if (message.role === 'ASSISTANT') {
+                    <span>{{ message.providerType }} · {{ message.modelId }}</span>
+                    <span class="message-status" [attr.data-status]="message.status">
+                      {{ statusLabel(message.status) }}
+                    </span>
+                    @if (message.inputTokens !== null || message.outputTokens !== null) {
+                      <span>
+                        Tokens {{ message.inputTokens ?? '—' }} / {{ message.outputTokens ?? '—' }}
+                      </span>
+                    }
+                    <button type="button" (click)="copy(message)">Copiar</button>
+                    @if (message.status !== 'STREAMING') {
+                      <button type="button" [disabled]="generating()" (click)="regenerate(message)">
+                        Regenerar
+                      </button>
+                    }
+                  }
+                </footer>
+              </div>
+            </article>
+          }
+        </div>
+      }
+    </div>
+
+    <section class="composer" aria-label="Enviar mensaje">
+      <div class="selection-row">
+        <label>
+          <span>Proveedor</span>
+          <select
+            [formControl]="form.controls.providerConnectionId"
+            [attr.disabled]="generating() ? true : null"
+            (change)="providerChanged()"
+          >
+            <option value="">Selecciona una conexion</option>
+            @for (provider of providers(); track provider.id) {
+              <option [value]="provider.id">
+                {{ provider.displayName }} · {{ provider.state }}
+              </option>
+            }
+          </select>
+        </label>
+        <label>
+          <span>Modelo</span>
+          <select
+            [formControl]="form.controls.modelId"
+            [attr.disabled]="generating() || loadingModels() ? true : null"
+            (change)="modelChanged()"
+          >
+            <option value="">{{ loadingModels() ? 'Cargando…' : 'Selecciona un modelo' }}</option>
+            @for (model of models(); track model.id) {
+              <option [value]="model.modelId">{{ model.displayName }} · {{ model.origin }}</option>
+            }
+          </select>
+        </label>
+        <div class="capability-list" aria-label="Capacidades del modelo">
+          @for (capability of capabilityEntries(); track capability.label) {
+            <span class="capability" [attr.data-value]="capability.value">
+              {{ capability.label }} · {{ capability.value }}
+            </span>
+          }
+        </div>
+        <span class="mcp-state" [attr.data-state]="mcp()?.state ?? 'DOWN'">
+          MCP {{ integrationMode().toUpperCase() }} {{ mcp()?.state ?? 'SIN DATOS' }} · integracion
+          real en Sprint 4
+        </span>
+      </div>
+
+      <div class="composer-box">
+        <label class="sr-only" for="chat-message">Mensaje</label>
+        <textarea
+          id="chat-message"
+          rows="3"
+          maxlength="32000"
+          placeholder="Escribe un mensaje. Enter envia; Shift+Enter crea una linea."
+          [formControl]="form.controls.content"
+          [attr.disabled]="generating() || !providers().length ? true : null"
+          (keydown)="composerKeydown($event)"
+        ></textarea>
+        @if (generating()) {
+          <button
+            mat-flat-button
+            class="stop-button"
+            type="button"
+            [disabled]="stopping() || !activeGenerationId()"
+            (click)="stop()"
+          >
+            ■ {{ stopping() ? 'Deteniendo…' : 'Detener' }}
+          </button>
+        } @else {
+          <button
+            mat-flat-button
+            type="button"
+            [disabled]="form.invalid || !providers().length"
+            (click)="send()"
+          >
+            Enviar ↑
+          </button>
+        }
+      </div>
+      <p class="composer-hint">
+        Verifica respuestas importantes. El historial enviado se limita por mensajes y caracteres.
+      </p>
+    </section>
+  </section>
+</main>

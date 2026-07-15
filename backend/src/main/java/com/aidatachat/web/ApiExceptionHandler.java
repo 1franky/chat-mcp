@@ -1,5 +1,7 @@
 package com.aidatachat.web;
 
+import com.aidatachat.application.exception.ChatConflictException;
+import com.aidatachat.application.exception.ConversationNotFoundException;
 import com.aidatachat.application.exception.DuplicateUserException;
 import com.aidatachat.application.exception.InvalidCredentialsException;
 import com.aidatachat.application.exception.LastAdministratorException;
@@ -85,6 +87,24 @@ public class ApiExceptionHandler {
                 "provider-not-found",
                 "Proveedor no encontrado",
                 "La conexion solicitada no existe.");
+    }
+
+    @ExceptionHandler(ConversationNotFoundException.class)
+    ProblemDetail conversationNotFound(ConversationNotFoundException exception) {
+        return problem(
+                HttpStatus.NOT_FOUND,
+                "conversation-not-found",
+                "Conversacion no encontrada",
+                "La conversacion solicitada no existe.");
+    }
+
+    @ExceptionHandler(ChatConflictException.class)
+    ProblemDetail chatConflict(ChatConflictException exception) {
+        return problem(
+                HttpStatus.CONFLICT,
+                "chat-conflict",
+                "Operacion de chat no disponible",
+                "La conversacion tiene otra generacion activa o la seleccion ya no esta disponible.");
     }
 
     @ExceptionHandler(ProviderCommunicationException.class)

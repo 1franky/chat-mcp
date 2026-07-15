@@ -50,13 +50,27 @@ Actualizado: 2026-07-15.
 - [x] Cambiar el puerto host de despliegue de la interfaz web a `3000`.
 - [x] Actualizar README, CHANGELOG, documentos y ADR-0007.
 
-## Fuera del Sprint 2
+## Sprint 3 — Chat
 
-- [ ] Sprint 3 — conversaciones, mensajes, streaming, cancelacion y UI completa de chat. Requiere aprobacion explicita.
-- [ ] Añadir en Sprint 3 un boton accesible para alternar entre el tema claro existente y un nuevo tema oscuro, con preferencia persistente y respeto inicial de `prefers-color-scheme`.
+- [x] Crear migracion de conversaciones y mensajes con ownership, secuencia y una sola generacion activa.
+- [x] Implementar crear, listar, buscar, abrir, renombrar y eliminar conversaciones propias.
+- [x] Persistir mensajes, regeneraciones, parciales y snapshots inmutables de proveedor/modelo.
+- [x] Implementar streaming SSE con heartbeat, timeout, desconexion y cancelacion explícita.
+- [x] Guardar uso opcional, `finishReason` y request ID acotado cuando el proveedor los entrega.
+- [x] Normalizar streaming de OpenAI, Anthropic, BytePlus, OpenAI-compatible, Ollama y fake.
+- [x] Mantener historial acotado y no enviar prompts ni cuerpos de proveedor a logs o auditoria.
+- [x] Crear UI completa de chat con historial, busqueda, selector, capacidades y estado de conexion.
+- [x] Añadir detener, copiar, regenerar, renombrar, eliminar con confirmacion y errores recuperables.
+- [x] Renderizar Markdown, codigo y tablas sin HTML arbitrario ni URLs peligrosas.
+- [x] Añadir boton accesible de tema claro/oscuro, persistencia local y `prefers-color-scheme` inicial.
+- [x] Identificar MCP como fake y reservar conexion real, tools y tarjetas para Sprint 4.
+- [x] Añadir pruebas backend, frontend y E2E sin APIs pagadas, más documentos y ADR-0008.
+
+## Fuera del Sprint 3
+
 - [ ] Sprint 4 — implementar el cliente MCP Streamable HTTP, discovery de tools, tool calling multi-proveedor, tarjetas de tools y pruebas de contrato/seguridad.
 - [ ] Configurar en Sprint 4 la conexion backend-a-backend con Data Platform MCP mediante `MCP_BASE_URL`, `MCP_ENDPOINT`, version de protocolo y major de contrato, conservando el servicio fuera del navegador y sin modificar el proyecto MCP.
 - [ ] Mostrar en Sprint 4 el estado `UP`/`DEGRADED`/`DOWN`, el contrato negociado y las funciones disponibles del MCP en un panel de solo lectura para el usuario.
 - [ ] Sprint 5+ — RAG y demas roadmap definido en la especificacion.
 
-No se debe iniciar ninguna tarea fuera de Sprint 2 sin aprobacion del propietario.
+No se debe iniciar ninguna tarea fuera de Sprint 3 sin aprobacion del propietario.

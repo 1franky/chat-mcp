@@ -2,7 +2,7 @@
 
 ## Contexto y alcance
 
-Sprint 2 mantiene un monolito modular desplegable. Los limites internos permiten cambiar persistencia e integraciones sin acoplar dominio y casos de uso a Spring, SDKs de proveedores o MCP.
+Sprint 3 mantiene un monolito modular desplegable. Los limites internos permiten cambiar persistencia e integraciones sin acoplar dominio y casos de uso a Spring, SDKs de proveedores o MCP.
 
 ```mermaid
 flowchart TB
@@ -16,6 +16,7 @@ flowchart TB
     JPA["adapters.out.persistence: JPA/JDBC"] --> OUT
     SEC["adapters.out.security: Argon2/sesiones"] --> OUT
     PROVIDERS["adapters.out.provider: HTTP y SSRF"] --> OUT
+    CHAT["adapters.out.persistence.chat: conversaciones"] --> OUT
     CIPHER["adapters.out.security: AES-256-GCM"] --> OUT
 ```
 
@@ -29,10 +30,10 @@ Reglas verificadas con ArchUnit:
 
 `LlmProviderPort`, `ModelCatalogPort`, `McpGateway`, `EmbeddingProviderPort`, `DocumentStoragePort`, `VectorSearchPort`, `CredentialCipherPort`, `ConversationRepository`, `DocumentRepository` y `AuditRepository`.
 
-Sprint 1 anadio `UserAccountRepository`, `IdentityTransactionPort`, `PasswordHashPort` y
-`SessionInvalidationPort`. Sprint 2 activa `LlmProviderPort`, `CredentialCipherPort` y
-`ProviderConnectionRepository` con adaptadores OpenAI, Anthropic, BytePlus, OpenAI-compatible,
-Ollama y fake. MCP conserva exclusivamente el adaptador fake; chat, documentos y vectores siguen
+Sprint 1 anadio puertos de identidad y sesiones. Sprint 2 activo proveedores y cifrado. Sprint 3
+activa `ChatUseCase`, `ConversationRepository` y `LlmChatGateway`: el caso de uso controla ownership,
+historial, estados y auditoria; JPA controla orden/concurrencia; los adaptadores traducen streams
+externos a `LlmChunk`. MCP conserva exclusivamente el adaptador fake; documentos y vectores siguen
 sin capacidad funcional.
 
 ## Contenedores y redes
@@ -60,9 +61,10 @@ flowchart LR
 
 ## Datos
 
-Flyway crea la extension `vector`, namespaces delimitados, identidad, sesiones, auditoria y las
-tablas `chat.provider_connection` y `chat.provider_model`. El schema `rag` sigue vacio. JPA usa
-`ddl-auto=validate`; Flyway es la unica autoridad de esquema.
+Flyway crea la extension `vector`, namespaces delimitados, identidad, sesiones, auditoria,
+proveedores y `chat.conversation`/`chat.message`. El schema `rag` sigue vacio. JPA usa
+`ddl-auto=validate`; Flyway es la unica autoridad de esquema. Un indice parcial impide dos mensajes
+de asistente `STREAMING` para la misma conversacion y un lock pesimista asigna posiciones estables.
 
 ## Flujo disponible
 
@@ -83,6 +85,27 @@ sequenceDiagram
     WEB-->>UI: perfil publico + cookie HttpOnly
 ```
 
-Tambien estan disponibles login/logout, perfil, administracion de usuarios y gestion de conexiones
-y modelos propios. El endpoint de estado se conserva. Ningun flujo transmite chats; las pruebas
-usan dobles y servidores locales, y una prueba real sólo ocurre por accion explícita del usuario.
+Tambien estan disponibles login/logout, administracion y proveedores propios. En chat, Spring MVC
+expone `SseEmitter`; un publisher de aplicacion persiste cada parcial, normaliza eventos terminales y
+cancela el upstream si el navegador desaparece. Cada mensaje del asistente conserva el snapshot con
+el que se genero. Las pruebas usan dobles y servidores locales; ninguna invoca APIs pagadas.
+
+```mermaid
+sequenceDiagram
+    participant UI as Angular
+    participant API as ChatController / SSE
+    participant APP as ChatService
+    participant DB as PostgreSQL
+    participant LLM as LlmChatGateway
+    UI->>API: POST messages/stream + CSRF
+    API->>APP: startGeneration(owner, conversation, content)
+    APP->>DB: USER COMPLETED + ASSISTANT STREAMING
+    APP->>LLM: historial acotado + modelo seleccionado
+    loop deltas
+      LLM-->>APP: LlmChunk
+      APP->>DB: persistir parcial
+      APP-->>UI: event: delta
+    end
+    APP->>DB: COMPLETED / CANCELLED / FAILED
+    APP-->>UI: evento terminal + uso
+```

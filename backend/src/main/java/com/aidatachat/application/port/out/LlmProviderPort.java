@@ -41,6 +41,11 @@ public interface LlmProviderPort {
 
     Flow.Publisher<LlmChunk> streamChat(LlmChatRequest request);
 
+    default Flow.Publisher<LlmChunk> streamChat(
+            ProviderClientConfiguration configuration, char[] credential, LlmChatRequest request) {
+        return streamChat(request);
+    }
+
     record ProviderClientConfiguration(
             String baseUrl,
             String region,

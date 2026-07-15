@@ -94,6 +94,115 @@ test('shows a safe provider catalog and verifies the fake connection', async ({ 
   await expect(page.getByText('Sin credencial')).toBeVisible();
 });
 
+test('creates a conversation and renders a fake streamed response', async ({ page }) => {
+  const conversation = {
+    id: '9ce23b08-c5bb-40b0-962d-67bd2417eb3d',
+    title: 'Explica el resultado',
+    providerConnectionId: fakeProvider.id,
+    modelId: 'fake-chat-v1',
+    createdAt: '2026-07-15T00:00:00Z',
+    updatedAt: '2026-07-15T00:00:00Z',
+  };
+  const userMessage = chatMessage(
+    '1831213d-2cf9-4410-acb1-5f070233e505',
+    conversation.id,
+    1,
+    'USER',
+    'Explica el resultado',
+    'COMPLETED',
+  );
+  const partial = chatMessage(
+    '43b9d6fc-3fdf-4ba9-bfad-72c84f880685',
+    conversation.id,
+    2,
+    'ASSISTANT',
+    'Respuesta ',
+    'STREAMING',
+  );
+  const completed = {
+    ...partial,
+    content: 'Respuesta **fake** en streaming.',
+    status: 'COMPLETED',
+    inputTokens: 4,
+    outputTokens: 6,
+    finishReason: 'stop',
+    providerRequestId: 'fake-request',
+    updatedAt: '2026-07-15T00:00:01Z',
+  };
+  let created = false;
+
+  await page.route('**/api/auth/bootstrap', async (route) => {
+    await route.fulfill({ json: bootstrap(admin) });
+  });
+  await page.route('**/api/system/status', async (route) => {
+    await route.fulfill({
+      json: {
+        sprint: 3,
+        mode: 'fake',
+        mcp: { state: 'UP', protocolVersion: 'test', contractVersion: '1.0.0' },
+      },
+    });
+  });
+  await page.route('**/api/providers', async (route) => {
+    await route.fulfill({ json: [{ ...fakeProvider, defaultModelId: 'fake-chat-v1' }] });
+  });
+  await page.route(`**/api/providers/${fakeProvider.id}/models`, async (route) => {
+    await route.fulfill({ json: [fakeModel] });
+  });
+  await page.route('**/api/conversations?**', async (route) => {
+    await route.fulfill({
+      json: {
+        items: created ? [conversation] : [],
+        page: 0,
+        size: 30,
+        totalElements: created ? 1 : 0,
+        totalPages: created ? 1 : 0,
+      },
+    });
+  });
+  await page.route('**/api/conversations', async (route) => {
+    expect(route.request().method()).toBe('POST');
+    const request = route.request().postDataJSON() as Record<string, unknown>;
+    expect(request['providerConnectionId']).toBe(fakeProvider.id);
+    expect(request['modelId']).toBe('fake-chat-v1');
+    created = true;
+    await route.fulfill({ status: 201, json: conversation });
+  });
+  await page.route(`**/api/conversations/${conversation.id}`, async (route) => {
+    await route.fulfill({ json: conversation });
+  });
+  await page.route(`**/api/conversations/${conversation.id}/messages`, async (route) => {
+    await route.fulfill({ json: created ? [userMessage, completed] : [] });
+  });
+  await page.route(`**/api/conversations/${conversation.id}/messages/stream`, async (route) => {
+    const generationId = '790d8f07-2ea0-42d8-9b29-2c5e5fb3a1a7';
+    const events = [
+      generationEvent('generation', generationId, userMessage, partial),
+      generationEvent('delta', generationId, null, partial, 'Respuesta '),
+      generationEvent('complete', generationId, null, completed),
+    ];
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: events
+        .map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+        .join(''),
+    });
+  });
+
+  await page.goto('/chat');
+  const composer = page.getByRole('textbox', { name: 'Mensaje' });
+  await expect(composer).toBeEnabled();
+  await composer.fill('Explica el resultado');
+  await page.getByRole('button', { name: /Enviar/ }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/chat/${conversation.id}$`));
+  await expect(page.locator('.markdown')).toContainText('Respuesta fake en streaming.');
+  await expect(page.getByText('Completado')).toBeVisible();
+  await expect(page.getByText(/Tokens 4 \/ 6/)).toBeVisible();
+  await expect(page.getByText(/MCP FAKE UP/)).toBeVisible();
+});
+
 function bootstrap(user: typeof admin | null) {
   return {
     bootstrapRequired: false,
@@ -131,3 +240,59 @@ const fakeProvider = {
   createdAt: '2026-07-15T00:00:00Z',
   updatedAt: '2026-07-15T00:00:00Z',
 };
+
+const fakeModel = {
+  id: '6d989f42-8944-492c-ae91-c5859ec24140',
+  modelId: 'fake-chat-v1',
+  displayName: 'fake-chat-v1',
+  origin: 'DISCOVERED',
+  capabilities: fakeProvider.capabilities,
+  discoveredAt: '2026-07-15T00:00:00Z',
+  lastValidatedAt: null,
+};
+
+function chatMessage(
+  id: string,
+  conversationId: string,
+  position: number,
+  role: 'USER' | 'ASSISTANT',
+  content: string,
+  status: 'STREAMING' | 'COMPLETED',
+) {
+  return {
+    id,
+    conversationId,
+    position,
+    role,
+    content,
+    providerConnectionId: role === 'ASSISTANT' ? fakeProvider.id : null,
+    providerType: role === 'ASSISTANT' ? 'FAKE' : null,
+    modelId: role === 'ASSISTANT' ? 'fake-chat-v1' : null,
+    status,
+    inputTokens: null,
+    outputTokens: null,
+    finishReason: null,
+    providerRequestId: null,
+    regeneratedFromMessageId: null,
+    createdAt: '2026-07-15T00:00:00Z',
+    updatedAt: '2026-07-15T00:00:00Z',
+  };
+}
+
+function generationEvent(
+  type: 'generation' | 'delta' | 'complete',
+  generationId: string,
+  userMessage: ReturnType<typeof chatMessage> | null,
+  assistantMessage: ReturnType<typeof chatMessage> | null,
+  delta: string | null = null,
+) {
+  return {
+    type,
+    generationId,
+    userMessage,
+    assistantMessage,
+    delta,
+    errorCode: null,
+    retryable: false,
+  };
+}

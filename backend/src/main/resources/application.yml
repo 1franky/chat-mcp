@@ -65,9 +65,15 @@ info:
   application:
     name: AI Data Chat
     version: "@project.version@"
-    sprint: 2
+    sprint: 3
 
 app:
+  chat:
+    stream-timeout: ${CHAT_STREAM_TIMEOUT:2m}
+    heartbeat-interval: ${CHAT_HEARTBEAT_INTERVAL:15s}
+    max-history-messages: ${CHAT_MAX_HISTORY_MESSAGES:200}
+    max-history-characters: ${CHAT_MAX_HISTORY_CHARACTERS:200000}
+    max-response-characters: ${CHAT_MAX_RESPONSE_CHARACTERS:1000000}
   identity:
     allow-public-registration: ${ALLOW_PUBLIC_REGISTRATION:true}
   security:

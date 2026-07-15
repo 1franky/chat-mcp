@@ -24,6 +24,6 @@ public final class SystemStatusService implements SystemStatusUseCase {
     @Override
     public SystemBootstrapStatus currentStatus() {
         return new SystemBootstrapStatus(
-                "AI Data Chat", version, 2, mode, llmProvider.descriptor(), mcpGateway.status());
+                "AI Data Chat", version, 3, mode, llmProvider.descriptor(), mcpGateway.status());
     }
 }

@@ -4,6 +4,7 @@ import com.aidatachat.adapters.out.fake.FakeLlmProviderAdapter;
 import com.aidatachat.adapters.out.fake.FakeMcpGateway;
 import com.aidatachat.adapters.out.provider.AnthropicProviderAdapter;
 import com.aidatachat.adapters.out.provider.BytePlusProviderAdapter;
+import com.aidatachat.adapters.out.provider.ConfiguredLlmChatGateway;
 import com.aidatachat.adapters.out.provider.OllamaProviderAdapter;
 import com.aidatachat.adapters.out.provider.OpenAiCompatibleProviderAdapter;
 import com.aidatachat.adapters.out.provider.OpenAiProviderAdapter;
@@ -12,16 +13,20 @@ import com.aidatachat.adapters.out.provider.ProviderHttpClient;
 import com.aidatachat.adapters.out.security.AesGcmCredentialCipherAdapter;
 import com.aidatachat.adapters.out.security.Argon2PasswordHashAdapter;
 import com.aidatachat.adapters.out.security.SpringSessionInvalidationAdapter;
+import com.aidatachat.application.port.in.ChatUseCase;
 import com.aidatachat.application.port.in.SystemStatusUseCase;
 import com.aidatachat.application.port.out.AuditRepository;
+import com.aidatachat.application.port.out.ConversationRepository;
 import com.aidatachat.application.port.out.CredentialCipherPort;
 import com.aidatachat.application.port.out.IdentityTransactionPort;
+import com.aidatachat.application.port.out.LlmChatGateway;
 import com.aidatachat.application.port.out.LlmProviderPort;
 import com.aidatachat.application.port.out.McpGateway;
 import com.aidatachat.application.port.out.PasswordHashPort;
 import com.aidatachat.application.port.out.ProviderConnectionRepository;
 import com.aidatachat.application.port.out.SessionInvalidationPort;
 import com.aidatachat.application.port.out.UserAccountRepository;
+import com.aidatachat.application.service.ChatService;
 import com.aidatachat.application.service.IdentityService;
 import com.aidatachat.application.service.ProviderManagementService;
 import com.aidatachat.application.service.SystemStatusService;
@@ -29,6 +34,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -130,6 +137,39 @@ public class ApplicationBeansConfiguration {
             List<LlmProviderPort> adapters,
             Clock clock) {
         return new ProviderManagementService(connections, cipher, audit, adapters, clock);
+    }
+
+    @Bean
+    LlmChatGateway llmChatGateway(
+            ProviderConnectionRepository connections,
+            CredentialCipherPort cipher,
+            List<LlmProviderPort> adapters) {
+        return new ConfiguredLlmChatGateway(connections, cipher, adapters);
+    }
+
+    @Bean
+    ChatUseCase chatUseCase(
+            ConversationRepository conversations,
+            LlmChatGateway llm,
+            AuditRepository audit,
+            Clock clock,
+            @Value("${app.chat.max-history-messages:200}") int maxHistoryMessages,
+            @Value("${app.chat.max-history-characters:200000}") int maxHistoryCharacters,
+            @Value("${app.chat.max-response-characters:1000000}") int maxResponseCharacters) {
+        return new ChatService(
+                conversations,
+                llm,
+                audit,
+                clock,
+                maxHistoryMessages,
+                maxHistoryCharacters,
+                maxResponseCharacters);
+    }
+
+    @Bean(destroyMethod = "shutdown")
+    ScheduledExecutorService chatHeartbeatScheduler() {
+        return Executors.newSingleThreadScheduledExecutor(
+                Thread.ofPlatform().name("chat-heartbeat").daemon(true).factory());
     }
 
     @Bean

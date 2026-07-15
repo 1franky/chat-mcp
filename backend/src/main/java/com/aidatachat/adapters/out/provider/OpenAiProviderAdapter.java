@@ -3,6 +3,8 @@ package com.aidatachat.adapters.out.provider;
 import com.aidatachat.application.port.out.LlmProviderPort.ProviderClientConfiguration;
 import com.aidatachat.domain.model.CapabilityAvailability;
 import com.aidatachat.domain.model.DiscoveredProviderModel;
+import com.aidatachat.domain.model.LlmChatRequest;
+import com.aidatachat.domain.model.LlmChunk;
 import com.aidatachat.domain.model.ProviderCapabilityProfile;
 import com.aidatachat.domain.model.ProviderProbeResult;
 import com.aidatachat.domain.model.ProviderType;
@@ -10,6 +12,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Flow;
 import org.springframework.web.util.UriUtils;
 import tools.jackson.databind.JsonNode;
 
@@ -51,6 +54,18 @@ public final class OpenAiProviderAdapter extends AbstractHttpLlmProviderAdapter 
     public List<DiscoveredProviderModel> discoverModels(
             ProviderClientConfiguration configuration, char[] credential) {
         return listModels(ProviderUris.append(baseUrl, "/models"), credential).models();
+    }
+
+    @Override
+    public Flow.Publisher<LlmChunk> streamChat(
+            ProviderClientConfiguration configuration, char[] credential, LlmChatRequest request) {
+        String token = secret(credential);
+        return ProviderStreamingSupport.map(
+                http.postSse(
+                        ProviderUris.append(baseUrl, "/responses"),
+                        headers -> headers.setBearerAuth(token),
+                        ProviderStreamingSupport.responsesBody(request)),
+                ProviderStreamingSupport::parseOpenAiResponses);
     }
 
     @Override

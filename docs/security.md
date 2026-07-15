@@ -56,6 +56,8 @@ otras cuentas.
 - La rotacion de claves de proveedor entre varias versiones sigue pendiente; Sprint 2 carga una
   unica version activa.
 - MCP remoto sigue deshabilitado y sin autenticacion; solo backend pertenece a `ai-platform`.
+- Una caida abrupta del proceso puede dejar un mensaje `STREAMING`; la reconciliacion de generaciones
+  huerfanas queda pendiente de hardening operativo.
 
 ## Secretos
 
@@ -78,3 +80,17 @@ Produccion debe inyectarlos desde un gestor de secretos y rotarlos de forma inde
 La version de clave prepara rotacion, pero todavía no existe un job de recifrado ni soporte para
 varias claves simultaneas. La ventana entre validacion DNS y conexion es un riesgo residual que
 debe endurecerse antes de aceptar dominios controlados por terceros fuera de una allowlist estable.
+
+## Chat y contenido generado
+
+- Todas las operaciones filtran `conversation_id` junto con `owner_id`; los IDs ajenos producen 404.
+- Sólo una generacion puede estar activa por conversacion, tanto en memoria como mediante indice
+  parcial en PostgreSQL.
+- El historial y las respuestas tienen limites de mensajes/caracteres. Prompts, deltas y cuerpos de
+  proveedor no se registran en auditoria ni logs operativos.
+- Request IDs y razones terminales se acotan antes de persistir. Las credenciales se descifran sólo
+  al preparar el cliente seleccionado y el arreglo mutable se limpia inmediatamente.
+- El render Markdown escapa HTML y atributos, permite enlaces sólo `http`, `https` y `mailto`, y
+  Angular vuelve a sanitizar el resultado enlazado a `innerHTML`.
+- SSE es mismo-origen, exige sesion y CSRF, devuelve `Cache-Control: no-store`, heartbeats y cancela
+  el proveedor ante desconexion. Nginx desactiva buffering para `/api`.

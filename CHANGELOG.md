@@ -4,6 +4,27 @@ Todos los cambios relevantes del proyecto se documentan aquí. El formato sigue 
 
 ## [Unreleased]
 
+### Added — Sprint 3
+
+- Conversaciones y mensajes aislados por propietario con CRUD, busqueda, regeneracion y snapshots de proveedor/modelo.
+- Streaming SSE y cancelacion por usuario, timeout o desconexion, conservando contenido parcial.
+- Adaptadores streaming normalizados para OpenAI Responses, Anthropic Messages, BytePlus/OpenAI Chat Completions, compatibles, Ollama y fake.
+- Uso opcional, `finishReason` y request ID de proveedor persistidos sin cuerpos ni secretos.
+- UI completa de chat con historial, selectores, badges, estados, copiar, detener y errores recuperables.
+- Markdown seguro con codigo y tablas, tema oscuro persistente y preferencia inicial del sistema.
+- Migracion Flyway `V4`, pruebas de streaming/cancelacion/ownership, parser SSE, sanitizacion y E2E de chat fake.
+
+### Security — Sprint 3
+
+- Ownership aplicado en controlador, caso de uso y repositorio; una cuenta `ADMIN` no puede leer chats ajenos.
+- Credenciales descifradas únicamente en backend y limpiadas de buffers mutables tras configurar la peticion.
+- Historial, mensajes y respuestas tienen limites; SSE usa mismo origen, CSRF, no-store y buffering desactivado.
+- HTML, handlers y esquemas de URL peligrosos no se renderizan desde respuestas Markdown.
+
+### Changed — Sprint 3
+
+- El estado MCP visible se etiqueta como fake; la conexion real y tool calling permanecen en Sprint 4.
+
 ### Added — Sprint 2
 
 - Conexiones LLM aisladas por usuario para OpenAI, Anthropic, BytePlus, OpenAI-compatible, Ollama y fake.
@@ -62,6 +83,6 @@ Todos los cambios relevantes del proyecto se documentan aquí. El formato sigue 
 - Endpoints no incluidos en el bootstrap denegados por Spring Security.
 - Sin secretos reales ni llamadas a proveedores pagados.
 
-### Not implemented after Sprint 2
+### Not implemented after Sprint 3
 
-- Conversaciones, streaming de chat, tool calling, MCP remoto y RAG.
+- Tool calling, MCP remoto, tarjetas de tools, RAG, documentos y citas.
