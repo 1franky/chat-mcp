@@ -10,17 +10,23 @@ import com.aidatachat.domain.model.CapabilityAvailability;
 import com.aidatachat.domain.model.ChatMessage;
 import com.aidatachat.domain.model.EncryptedProviderCredential;
 import com.aidatachat.domain.model.LlmChatRequest;
+import com.aidatachat.domain.model.McpToolDefinition;
 import com.aidatachat.domain.model.ProviderConnection;
 import com.aidatachat.domain.model.ProviderModel;
 import com.aidatachat.domain.model.ProviderType;
 import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 public final class ConfiguredLlmChatGateway implements LlmChatGateway {
+
+    private static final Set<ProviderType> TOOL_CALLING_PROVIDERS =
+            EnumSet.of(ProviderType.OPENAI, ProviderType.ANTHROPIC);
 
     private final ProviderConnectionRepository connections;
     private final CredentialCipherPort cipher;
@@ -48,7 +54,11 @@ public final class ConfiguredLlmChatGateway implements LlmChatGateway {
 
     @Override
     public ChatStream stream(
-            UUID ownerId, UUID providerConnectionId, String modelId, List<ChatMessage> messages) {
+            UUID ownerId,
+            UUID providerConnectionId,
+            String modelId,
+            List<ChatMessage> messages,
+            List<McpToolDefinition> tools) {
         ResolvedSelection resolved = resolve(ownerId, providerConnectionId, modelId);
         ProviderConnection connection = resolved.connection();
         ProviderModel model = resolved.model();
@@ -56,6 +66,8 @@ public final class ConfiguredLlmChatGateway implements LlmChatGateway {
         if (adapter == null) {
             throw new ChatConflictException("No adapter is configured for the selected provider");
         }
+        List<McpToolDefinition> offeredTools =
+                TOOL_CALLING_PROVIDERS.contains(connection.providerType()) ? tools : List.of();
 
         char[] credential = decrypt(connection.credential());
         try {
@@ -65,7 +77,7 @@ public final class ConfiguredLlmChatGateway implements LlmChatGateway {
                     adapter.streamChat(
                             configuration(connection),
                             credential,
-                            new LlmChatRequest(model.modelId(), messages)));
+                            new LlmChatRequest(model.modelId(), messages, offeredTools)));
         } finally {
             Arrays.fill(credential, '\0');
         }

@@ -12,20 +12,25 @@ import com.aidatachat.application.port.in.ChatUseCase.GenerationSession;
 import com.aidatachat.application.port.out.AuditRepository;
 import com.aidatachat.application.port.out.ConversationRepository;
 import com.aidatachat.application.port.out.LlmChatGateway;
+import com.aidatachat.application.port.out.McpGateway;
 import com.aidatachat.application.service.ChatService;
 import com.aidatachat.domain.model.Conversation;
 import com.aidatachat.domain.model.ConversationMessage;
+import com.aidatachat.domain.model.IntegrationState;
 import com.aidatachat.domain.model.LlmChunk;
+import com.aidatachat.domain.model.McpConnectionStatus;
 import com.aidatachat.domain.model.MessageRole;
 import com.aidatachat.domain.model.MessageStatus;
 import com.aidatachat.domain.model.ProviderType;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,6 +46,7 @@ class ChatServiceTest {
 
     private final ConversationRepository conversations = mock(ConversationRepository.class);
     private final LlmChatGateway llm = mock(LlmChatGateway.class);
+    private final McpGateway mcp = mock(McpGateway.class);
     private final AuditRepository audit = mock(AuditRepository.class);
     private final Conversation conversation =
             new Conversation(
@@ -50,15 +56,29 @@ class ChatServiceTest {
 
     @BeforeEach
     void setUp() {
+        when(mcp.status())
+                .thenReturn(
+                        new McpConnectionStatus(
+                                IntegrationState.DOWN,
+                                "0.0.0",
+                                "0.0.0",
+                                "2025-11-25",
+                                "test",
+                                true));
         service =
                 new ChatService(
                         conversations,
                         llm,
+                        mcp,
                         audit,
                         Clock.fixed(NOW, ZoneOffset.UTC),
                         20,
                         20_000,
-                        20_000);
+                        20_000,
+                        6,
+                        1_048_576,
+                        Duration.ofSeconds(5),
+                        Executors.newSingleThreadExecutor());
         when(conversations.findByIdAndOwnerId(CONVERSATION_ID, OWNER_ID))
                 .thenReturn(Optional.of(conversation));
         when(conversations.findMessages(CONVERSATION_ID, OWNER_ID)).thenReturn(List.of());
@@ -129,7 +149,7 @@ class ChatServiceTest {
 
     @Test
     void completesAndPersistsNormalizedUsage() {
-        when(llm.stream(eq(OWNER_ID), eq(PROVIDER_ID), eq("fake-chat-v1"), any()))
+        when(llm.stream(eq(OWNER_ID), eq(PROVIDER_ID), eq("fake-chat-v1"), any(), any()))
                 .thenReturn(
                         new LlmChatGateway.ChatStream(
                                 ProviderType.FAKE,
@@ -161,7 +181,7 @@ class ChatServiceTest {
     @Test
     void subscriberCancellationMarksBrowserDisconnect() {
         AtomicBoolean upstreamCancelled = new AtomicBoolean();
-        when(llm.stream(eq(OWNER_ID), eq(PROVIDER_ID), eq("fake-chat-v1"), any()))
+        when(llm.stream(eq(OWNER_ID), eq(PROVIDER_ID), eq("fake-chat-v1"), any(), any()))
                 .thenReturn(
                         new LlmChatGateway.ChatStream(
                                 ProviderType.FAKE,
@@ -184,7 +204,7 @@ class ChatServiceTest {
     @Test
     void explicitCancellationCancelsUpstreamAndPreservesPartial() {
         AtomicBoolean upstreamCancelled = new AtomicBoolean();
-        when(llm.stream(eq(OWNER_ID), eq(PROVIDER_ID), eq("fake-chat-v1"), any()))
+        when(llm.stream(eq(OWNER_ID), eq(PROVIDER_ID), eq("fake-chat-v1"), any(), any()))
                 .thenReturn(
                         new LlmChatGateway.ChatStream(
                                 ProviderType.FAKE,

@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.aidatachat.adapters.out.security.AuthenticatedUser;
+import com.aidatachat.application.exception.ChatConflictException;
 import com.aidatachat.application.exception.ConversationNotFoundException;
 import com.aidatachat.application.port.in.ChatUseCase;
 import com.aidatachat.application.port.in.ChatUseCase.CreateConversationCommand;
@@ -17,10 +18,16 @@ import com.aidatachat.application.port.in.IdentityUseCase;
 import com.aidatachat.application.port.in.IdentityUseCase.RegisterCommand;
 import com.aidatachat.application.port.in.ProviderManagementUseCase;
 import com.aidatachat.application.port.in.ProviderManagementUseCase.SaveProviderCommand;
+import com.aidatachat.application.port.out.ConversationRepository;
+import com.aidatachat.domain.model.ConversationToolCall;
 import com.aidatachat.domain.model.MessageStatus;
+import com.aidatachat.domain.model.MessageToolCallStatus;
 import com.aidatachat.domain.model.ProviderType;
 import com.aidatachat.domain.model.UserAccount;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Flow;
@@ -30,6 +37,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -58,6 +66,7 @@ class ChatIntegrationTest {
     @Autowired private IdentityUseCase identity;
     @Autowired private ProviderManagementUseCase providers;
     @Autowired private ChatUseCase chat;
+    @Autowired private ConversationRepository conversations;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private WebApplicationContext webApplicationContext;
 
@@ -65,6 +74,7 @@ class ChatIntegrationTest {
 
     @BeforeEach
     void resetDatabase() {
+        jdbc.update("DELETE FROM chat.message_tool_call");
         jdbc.update("DELETE FROM chat.message");
         jdbc.update("DELETE FROM chat.conversation");
         jdbc.update("DELETE FROM chat.provider_model");
@@ -151,6 +161,117 @@ class ChatIntegrationTest {
                         get("/api/conversations/{id}", conversation.id())
                                 .with(user(principal(other))))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void toolCallsDoNotBypassTheSingleActiveGenerationInvariant() {
+        UserAccount owner = register("owner@example.test", "Owner");
+        ProviderSelection selection = fakeProvider(owner);
+        ChatUseCase.ConversationView conversation = createConversation(owner, selection);
+        Instant now = Instant.now();
+
+        ConversationRepository.GenerationMessages generation =
+                conversations.createGeneration(
+                        conversation.id(),
+                        owner.id(),
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        "Hola",
+                        selection.id(),
+                        ProviderType.FAKE,
+                        selection.modelId(),
+                        now);
+        UUID toolCallId = UUID.randomUUID();
+        conversations.recordToolCall(
+                conversation.id(),
+                owner.id(),
+                generation.assistantMessage().id(),
+                toolCallId,
+                1,
+                0,
+                "health_check",
+                "call-1",
+                Map.of("x", 1),
+                MessageToolCallStatus.RUNNING,
+                now);
+
+        assertThatThrownBy(
+                        () ->
+                                conversations.createGeneration(
+                                        conversation.id(),
+                                        owner.id(),
+                                        UUID.randomUUID(),
+                                        UUID.randomUUID(),
+                                        "Otro mensaje",
+                                        selection.id(),
+                                        ProviderType.FAKE,
+                                        selection.modelId(),
+                                        now))
+                .isInstanceOf(ChatConflictException.class);
+
+        conversations.updateToolCallResult(
+                conversation.id(),
+                owner.id(),
+                toolCallId,
+                MessageToolCallStatus.COMPLETED,
+                false,
+                Map.of("status", "ok"),
+                null,
+                now);
+        List<ConversationToolCall> toolCalls =
+                conversations
+                        .findToolCallsForMessages(List.of(generation.assistantMessage().id()))
+                        .getOrDefault(generation.assistantMessage().id(), List.of());
+        assertThat(toolCalls).hasSize(1);
+        assertThat(toolCalls.getFirst().status()).isEqualTo(MessageToolCallStatus.COMPLETED);
+        assertThat(toolCalls.getFirst().isError()).isFalse();
+    }
+
+    @Test
+    void enforcesUniqueRoundAndSequencePerMessage() {
+        UserAccount owner = register("owner@example.test", "Owner");
+        ProviderSelection selection = fakeProvider(owner);
+        ChatUseCase.ConversationView conversation = createConversation(owner, selection);
+        Instant now = Instant.now();
+        ConversationRepository.GenerationMessages generation =
+                conversations.createGeneration(
+                        conversation.id(),
+                        owner.id(),
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        "Hola",
+                        selection.id(),
+                        ProviderType.FAKE,
+                        selection.modelId(),
+                        now);
+        conversations.recordToolCall(
+                conversation.id(),
+                owner.id(),
+                generation.assistantMessage().id(),
+                UUID.randomUUID(),
+                1,
+                0,
+                "health_check",
+                null,
+                Map.of(),
+                MessageToolCallStatus.PENDING,
+                now);
+
+        assertThatThrownBy(
+                        () ->
+                                conversations.recordToolCall(
+                                        conversation.id(),
+                                        owner.id(),
+                                        generation.assistantMessage().id(),
+                                        UUID.randomUUID(),
+                                        1,
+                                        0,
+                                        "hello_world",
+                                        null,
+                                        Map.of(),
+                                        MessageToolCallStatus.PENDING,
+                                        now))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     private ProviderSelection fakeProvider(UserAccount owner) {

@@ -4,6 +4,10 @@ import com.aidatachat.application.exception.ProviderCommunicationException;
 import com.aidatachat.domain.model.ChatMessage;
 import com.aidatachat.domain.model.LlmChatRequest;
 import com.aidatachat.domain.model.LlmChunk;
+import com.aidatachat.domain.model.LlmToolCall;
+import com.aidatachat.domain.model.LlmToolCallDelta;
+import com.aidatachat.domain.model.McpToolDefinition;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Flow;
 import java.util.function.Function;
@@ -77,8 +81,11 @@ final class ProviderStreamingSupport {
         body.put("model", request.modelId());
         body.put("stream", true);
         body.put("store", false);
+        if (!request.tools().isEmpty()) {
+            body.set("tools", toolsForResponses(request.tools()));
+        }
         ArrayNode input = body.putArray("input");
-        addMessages(input, request);
+        addResponsesMessages(input, request);
         return body;
     }
 
@@ -99,8 +106,11 @@ final class ProviderStreamingSupport {
         body.put("model", request.modelId());
         body.put("stream", true);
         body.put("max_tokens", maxTokens);
+        if (!request.tools().isEmpty()) {
+            body.set("tools", toolsForAnthropic(request.tools()));
+        }
         ArrayNode messages = body.putArray("messages");
-        addMessages(messages, request);
+        addAnthropicMessages(messages, request);
         return body;
     }
 
@@ -119,13 +129,39 @@ final class ProviderStreamingSupport {
         return switch (type) {
             case "response.output_text.delta" ->
                     LlmChunk.delta(event.path("delta").asText(""), frame.requestId());
+            case "response.output_item.added" -> {
+                JsonNode item = event.path("item");
+                yield "function_call".equals(item.path("type").asText(""))
+                        ? LlmChunk.toolCallDelta(
+                                List.of(
+                                        new LlmToolCallDelta(
+                                                event.path("output_index").asInt(0),
+                                                item.path("call_id").asText(null),
+                                                item.path("name").asText(null),
+                                                "")),
+                                frame.requestId())
+                        : null;
+            }
+            case "response.function_call_arguments.delta" ->
+                    LlmChunk.toolCallDelta(
+                            List.of(
+                                    new LlmToolCallDelta(
+                                            event.path("output_index").asInt(0),
+                                            null,
+                                            null,
+                                            event.path("delta").asText(""))),
+                            frame.requestId());
             case "response.completed" -> {
                 JsonNode response = event.path("response");
                 JsonNode usage = response.path("usage");
+                String finishReason =
+                        hasFunctionCall(response.path("output"))
+                                ? "tool_calls"
+                                : response.path("status").asText("completed");
                 yield LlmChunk.completed(
                         integer(usage, "input_tokens"),
                         integer(usage, "output_tokens"),
-                        response.path("status").asText("completed"),
+                        finishReason,
                         requestId(frame, response.path("id").asText(null)));
             }
             case "response.incomplete" -> {
@@ -198,11 +234,35 @@ final class ProviderStreamingSupport {
                         null,
                         requestId(frame, message.path("id").asText(null)));
             }
+            case "content_block_start" -> {
+                JsonNode contentBlock = event.path("content_block");
+                yield "tool_use".equals(contentBlock.path("type").asText(""))
+                        ? LlmChunk.toolCallDelta(
+                                List.of(
+                                        new LlmToolCallDelta(
+                                                event.path("index").asInt(0),
+                                                contentBlock.path("id").asText(null),
+                                                contentBlock.path("name").asText(null),
+                                                "")),
+                                frame.requestId())
+                        : null;
+            }
             case "content_block_delta" -> {
                 JsonNode delta = event.path("delta");
-                yield "text_delta".equals(delta.path("type").asText())
-                        ? LlmChunk.delta(delta.path("text").asText(""), frame.requestId())
-                        : null;
+                yield switch (delta.path("type").asText("")) {
+                    case "text_delta" ->
+                            LlmChunk.delta(delta.path("text").asText(""), frame.requestId());
+                    case "input_json_delta" ->
+                            LlmChunk.toolCallDelta(
+                                    List.of(
+                                            new LlmToolCallDelta(
+                                                    event.path("index").asInt(0),
+                                                    null,
+                                                    null,
+                                                    delta.path("partial_json").asText(""))),
+                                    frame.requestId());
+                    default -> null;
+                };
             }
             case "message_delta" ->
                     new LlmChunk(
@@ -238,6 +298,102 @@ final class ProviderStreamingSupport {
         for (ChatMessage message : request.messages()) {
             target.addObject().put("role", message.role()).put("content", message.content());
         }
+    }
+
+    private static void addResponsesMessages(ArrayNode target, LlmChatRequest request) {
+        for (ChatMessage message : request.messages()) {
+            if ("tool".equals(message.role())) {
+                ObjectNode output = target.addObject();
+                output.put("type", "function_call_output");
+                output.put("call_id", message.toolCallId());
+                output.put("output", message.content());
+                continue;
+            }
+            if (!message.toolCalls().isEmpty()) {
+                if (!message.content().isEmpty()) {
+                    target.addObject()
+                            .put("role", message.role())
+                            .put("content", message.content());
+                }
+                for (LlmToolCall toolCall : message.toolCalls()) {
+                    ObjectNode call = target.addObject();
+                    call.put("type", "function_call");
+                    call.put("call_id", toolCall.id());
+                    call.put("name", toolCall.name());
+                    call.put("arguments", JSON.valueToTree(toolCall.arguments()).toString());
+                }
+                continue;
+            }
+            target.addObject().put("role", message.role()).put("content", message.content());
+        }
+    }
+
+    private static void addAnthropicMessages(ArrayNode target, LlmChatRequest request) {
+        for (ChatMessage message : request.messages()) {
+            if ("tool".equals(message.role())) {
+                ObjectNode toolResultMessage = target.addObject();
+                toolResultMessage.put("role", "user");
+                ArrayNode content = toolResultMessage.putArray("content");
+                ObjectNode toolResult = content.addObject();
+                toolResult.put("type", "tool_result");
+                toolResult.put("tool_use_id", message.toolCallId());
+                toolResult.put("content", message.content());
+                continue;
+            }
+            if (!message.toolCalls().isEmpty()) {
+                ObjectNode assistantMessage = target.addObject();
+                assistantMessage.put("role", "assistant");
+                ArrayNode content = assistantMessage.putArray("content");
+                if (!message.content().isEmpty()) {
+                    content.addObject().put("type", "text").put("text", message.content());
+                }
+                for (LlmToolCall toolCall : message.toolCalls()) {
+                    ObjectNode toolUse = content.addObject();
+                    toolUse.put("type", "tool_use");
+                    toolUse.put("id", toolCall.id());
+                    toolUse.put("name", toolCall.name());
+                    toolUse.set("input", JSON.valueToTree(toolCall.arguments()));
+                }
+                continue;
+            }
+            target.addObject().put("role", message.role()).put("content", message.content());
+        }
+    }
+
+    private static ArrayNode toolsForResponses(List<McpToolDefinition> tools) {
+        ArrayNode array = JsonNodeFactory.instance.arrayNode();
+        for (McpToolDefinition tool : tools) {
+            ObjectNode node = array.addObject();
+            node.put("type", "function");
+            node.put("name", tool.name());
+            node.put("description", tool.description());
+            node.set("parameters", JSON.valueToTree(tool.inputSchema()));
+            node.put("strict", false);
+        }
+        return array;
+    }
+
+    private static ArrayNode toolsForAnthropic(List<McpToolDefinition> tools) {
+        ArrayNode array = JsonNodeFactory.instance.arrayNode();
+        for (McpToolDefinition tool : tools) {
+            ObjectNode node = array.addObject();
+            node.put("name", tool.name());
+            node.put("description", tool.description());
+            node.set("input_schema", JSON.valueToTree(tool.inputSchema()));
+        }
+        return array;
+    }
+
+    private static boolean hasFunctionCall(JsonNode output) {
+        if (!output.isArray()) {
+            return false;
+        }
+        for (JsonNode item : output) {
+            if ("function_call".equals(item.path("type").asText(""))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static JsonNode parse(ProviderHttpClient.StreamFrame frame) {

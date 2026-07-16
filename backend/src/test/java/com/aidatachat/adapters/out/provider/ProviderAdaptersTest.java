@@ -215,6 +215,66 @@ class ProviderAdaptersTest {
     }
 
     @Test
+    void openAiAndAnthropicNormalizeToolCallStreamingEvents() throws Exception {
+        server.createContext(
+                "/openai-tools/responses",
+                exchange ->
+                        sendStream(
+                                exchange,
+                                "text/event-stream",
+                                """
+                                data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"call_1","name":"health_check"}}
+
+                                data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\\"a\\":1}"}
+
+                                data: {"type":"response.completed","response":{"id":"resp-tools","status":"completed","usage":{"input_tokens":3,"output_tokens":2},"output":[{"type":"function_call"}]}}
+
+                                """));
+        server.createContext(
+                "/anthropic-tools/messages",
+                exchange ->
+                        sendStream(
+                                exchange,
+                                "text/event-stream",
+                                """
+                                event: content_block_start
+                                data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"health_check"}}
+
+                                event: content_block_delta
+                                data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"a\\":1}"}}
+
+                                event: message_delta
+                                data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":2}}
+
+                                """));
+        LlmChatRequest request = request("model-test");
+        ChunkSubscriber openAi = new ChunkSubscriber();
+        ChunkSubscriber anthropic = new ChunkSubscriber();
+
+        new OpenAiProviderAdapter(http, baseUrl + "/openai-tools")
+                .streamChat(config(), "openai-key".toCharArray(), request)
+                .subscribe(openAi);
+        new AnthropicProviderAdapter(http, baseUrl + "/anthropic-tools")
+                .streamChat(config(), "anthropic-key".toCharArray(), request)
+                .subscribe(anthropic);
+
+        assertThat(openAi.finished.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(anthropic.finished.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(openAi.failure).isNull();
+        assertThat(openAi.chunks)
+                .flatExtracting(LlmChunk::toolCalls)
+                .extracting(delta -> delta.toolName())
+                .contains("health_check");
+        assertThat(openAi.chunks.getLast().finishReason()).isEqualTo("tool_calls");
+        assertThat(anthropic.failure).isNull();
+        assertThat(anthropic.chunks)
+                .flatExtracting(LlmChunk::toolCalls)
+                .extracting(delta -> delta.toolName())
+                .contains("health_check");
+        assertThat(anthropic.chunks.getLast().finishReason()).isEqualTo("tool_use");
+    }
+
+    @Test
     void bytePlusCompatibleAndOllamaNormalizeTheirStreamingFormats() throws Exception {
         String chatCompletionStream =
                 """

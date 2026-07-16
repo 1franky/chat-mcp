@@ -5,13 +5,18 @@ import com.aidatachat.application.exception.ConversationNotFoundException;
 import com.aidatachat.application.port.out.ConversationRepository;
 import com.aidatachat.domain.model.Conversation;
 import com.aidatachat.domain.model.ConversationMessage;
+import com.aidatachat.domain.model.ConversationToolCall;
 import com.aidatachat.domain.model.MessageRole;
 import com.aidatachat.domain.model.MessageStatus;
+import com.aidatachat.domain.model.MessageToolCallStatus;
 import com.aidatachat.domain.model.ProviderType;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -23,12 +28,15 @@ public class ConversationJpaAdapter implements ConversationRepository {
 
     private final SpringDataConversationRepository conversations;
     private final SpringDataConversationMessageRepository messages;
+    private final SpringDataConversationMessageToolCallRepository toolCalls;
 
     public ConversationJpaAdapter(
             SpringDataConversationRepository conversations,
-            SpringDataConversationMessageRepository messages) {
+            SpringDataConversationMessageRepository messages,
+            SpringDataConversationMessageToolCallRepository toolCalls) {
         this.conversations = conversations;
         this.messages = messages;
+        this.toolCalls = toolCalls;
     }
 
     @Override
@@ -210,6 +218,79 @@ public class ConversationJpaAdapter implements ConversationRepository {
                 updatedAt);
         conversation.touch(updatedAt);
         return messages.saveAndFlush(message).toDomain();
+    }
+
+    @Override
+    @Transactional
+    public ConversationToolCall recordToolCall(
+            UUID conversationId,
+            UUID ownerId,
+            UUID messageId,
+            UUID toolCallId,
+            int generationRound,
+            int sequence,
+            String toolName,
+            String providerToolCallId,
+            Map<String, Object> arguments,
+            MessageToolCallStatus status,
+            Instant startedAt) {
+        lockConversation(conversationId, ownerId);
+        messages.findByIdAndConversationId(messageId, conversationId)
+                .orElseThrow(ConversationNotFoundException::new);
+        ConversationMessageToolCallEntity entity =
+                new ConversationMessageToolCallEntity(
+                        toolCallId,
+                        messageId,
+                        generationRound,
+                        sequence,
+                        toolName,
+                        providerToolCallId,
+                        arguments,
+                        status,
+                        startedAt,
+                        startedAt);
+        return toolCalls.saveAndFlush(entity).toDomain();
+    }
+
+    @Override
+    @Transactional
+    public ConversationToolCall updateToolCallResult(
+            UUID conversationId,
+            UUID ownerId,
+            UUID toolCallId,
+            MessageToolCallStatus status,
+            Boolean isError,
+            Map<String, Object> result,
+            String errorCode,
+            Instant completedAt) {
+        lockConversation(conversationId, ownerId);
+        ConversationMessageToolCallEntity entity =
+                toolCalls
+                        .findById(toolCallId)
+                        .filter(candidate -> belongsToConversation(candidate, conversationId))
+                        .orElseThrow(ConversationNotFoundException::new);
+        entity.updateResult(status, isError, result, errorCode, completedAt);
+        return toolCalls.saveAndFlush(entity).toDomain();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, List<ConversationToolCall>> findToolCallsForMessages(
+            Collection<UUID> messageIds) {
+        if (messageIds.isEmpty()) {
+            return Map.of();
+        }
+        return toolCalls
+                .findAllByMessageIdInOrderByMessageIdAscGenerationRoundAscSequenceAsc(messageIds)
+                .stream()
+                .map(ConversationMessageToolCallEntity::toDomain)
+                .collect(Collectors.groupingBy(ConversationToolCall::messageId));
+    }
+
+    private boolean belongsToConversation(
+            ConversationMessageToolCallEntity toolCall, UUID conversationId) {
+        return messages.findByIdAndConversationId(toolCall.getMessageId(), conversationId)
+                .isPresent();
     }
 
     private ConversationEntity lockConversation(UUID conversationId, UUID ownerId) {

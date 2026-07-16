@@ -2,10 +2,14 @@ package com.aidatachat.application.port.out;
 
 import com.aidatachat.domain.model.Conversation;
 import com.aidatachat.domain.model.ConversationMessage;
+import com.aidatachat.domain.model.ConversationToolCall;
 import com.aidatachat.domain.model.MessageStatus;
+import com.aidatachat.domain.model.MessageToolCallStatus;
 import com.aidatachat.domain.model.ProviderType;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -53,6 +57,31 @@ public interface ConversationRepository {
             String finishReason,
             String providerRequestId,
             Instant updatedAt);
+
+    ConversationToolCall recordToolCall(
+            UUID conversationId,
+            UUID ownerId,
+            UUID messageId,
+            UUID toolCallId,
+            int generationRound,
+            int sequence,
+            String toolName,
+            String providerToolCallId,
+            Map<String, Object> arguments,
+            MessageToolCallStatus status,
+            Instant startedAt);
+
+    ConversationToolCall updateToolCallResult(
+            UUID conversationId,
+            UUID ownerId,
+            UUID toolCallId,
+            MessageToolCallStatus status,
+            Boolean isError,
+            Map<String, Object> result,
+            String errorCode,
+            Instant completedAt);
+
+    Map<UUID, List<ConversationToolCall>> findToolCallsForMessages(Collection<UUID> messageIds);
 
     record ConversationPage(
             List<Conversation> items, int page, int size, long totalElements, int totalPages) {

@@ -2,7 +2,7 @@
 
 ## Contexto y alcance
 
-Sprint 3 mantiene un monolito modular desplegable. Los limites internos permiten cambiar persistencia e integraciones sin acoplar dominio y casos de uso a Spring, SDKs de proveedores o MCP.
+Sprint 4 mantiene un monolito modular desplegable. Los limites internos permiten cambiar persistencia e integraciones sin acoplar dominio y casos de uso a Spring, SDKs de proveedores o MCP.
 
 ```mermaid
 flowchart TB
@@ -16,7 +16,8 @@ flowchart TB
     JPA["adapters.out.persistence: JPA/JDBC"] --> OUT
     SEC["adapters.out.security: Argon2/sesiones"] --> OUT
     PROVIDERS["adapters.out.provider: HTTP y SSRF"] --> OUT
-    CHAT["adapters.out.persistence.chat: conversaciones"] --> OUT
+    MCP["adapters.out.mcp: cliente Streamable HTTP"] --> OUT
+    CHAT["adapters.out.persistence.chat: conversaciones y tool calls"] --> OUT
     CIPHER["adapters.out.security: AES-256-GCM"] --> OUT
 ```
 
@@ -33,8 +34,9 @@ Reglas verificadas con ArchUnit:
 Sprint 1 anadio puertos de identidad y sesiones. Sprint 2 activo proveedores y cifrado. Sprint 3
 activa `ChatUseCase`, `ConversationRepository` y `LlmChatGateway`: el caso de uso controla ownership,
 historial, estados y auditoria; JPA controla orden/concurrencia; los adaptadores traducen streams
-externos a `LlmChunk`. MCP conserva exclusivamente el adaptador fake; documentos y vectores siguen
-sin capacidad funcional.
+externos a `LlmChunk`. Sprint 4 anade `adapters/out/mcp/` (cliente Streamable HTTP real,
+seleccionable junto al fake vía `app.mcp.mode`) y la orquestacion de tool calling en `ChatService`
+para OpenAI y Anthropic (ver ADR-0009); documentos y vectores siguen sin capacidad funcional.
 
 ## Contenedores y redes
 
@@ -108,4 +110,24 @@ sequenceDiagram
     end
     APP->>DB: COMPLETED / CANCELLED / FAILED
     APP-->>UI: evento terminal + uso
+```
+
+Para OpenAI y Anthropic, si el modelo pide una tool, `ChatService` no delega la conexion MCP al
+proveedor: valida el nombre contra el catalogo descubierto, ejecuta la llamada en un executor
+dedicado y reinyecta el resultado como un nuevo turno antes de continuar el mismo stream.
+
+```mermaid
+sequenceDiagram
+    participant LLM as LlmChatGateway
+    participant APP as ChatService
+    participant DB as PostgreSQL
+    participant MCP as McpGateway
+    LLM-->>APP: LlmChunk con tool_calls / tool_use
+    APP->>DB: message_tool_call PENDING
+    APP-->>UI: event: tool_call
+    APP->>MCP: call(toolName, arguments) [executor dedicado]
+    MCP-->>APP: McpToolResult (isError nunca se reescribe)
+    APP->>DB: message_tool_call COMPLETED/FAILED/BLOCKED
+    APP-->>UI: event: tool_result
+    APP->>LLM: historial + resultado de la tool
 ```

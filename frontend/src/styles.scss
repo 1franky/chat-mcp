@@ -21,6 +21,9 @@ html {
   --danger-surface: #ffe8e8;
   --danger-border: #e3a9a9;
   --danger-text: #872a2a;
+  --warning-surface: #fff2d9;
+  --warning-border: #e0bd76;
+  --warning-text: #8a5a05;
   --shadow-soft: rgba(32, 58, 72, 0.12);
   color-scheme: light;
   background:
@@ -59,6 +62,9 @@ html[data-theme='dark'] {
   --danger-surface: #442326;
   --danger-border: #744247;
   --danger-text: #ffb5b8;
+  --warning-surface: #3d2f14;
+  --warning-border: #74572a;
+  --warning-text: #f0c674;
   --shadow-soft: rgba(0, 0, 0, 0.35);
   color-scheme: dark;
   background:

@@ -1,8 +1,8 @@
 # AI Data Chat
 
-Aplicacion de chat con IA orientada a datos, actualmente completada hasta Sprint 3. Este repositorio es un monorepo con backend Spring Boot, frontend Angular, PostgreSQL con pgvector y dobles de prueba deterministas. La especificacion principal es [`AI_DATA_CHAT_PROMPT.md`](AI_DATA_CHAT_PROMPT.md).
+Aplicacion de chat con IA orientada a datos, actualmente completada hasta Sprint 4. Este repositorio es un monorepo con backend Spring Boot, frontend Angular, PostgreSQL con pgvector y dobles de prueba deterministas. La especificacion principal es [`AI_DATA_CHAT_PROMPT.md`](AI_DATA_CHAT_PROMPT.md).
 
-> Alcance actual: infraestructura, identidad, usuarios, conexiones LLM cifradas y chat persistente con streaming/cancelacion. MCP sigue siendo fake y de solo lectura; tool calling, la conexion remota con Data Platform MCP y RAG pertenecen a sprints posteriores.
+> Alcance actual: infraestructura, identidad, usuarios, conexiones LLM cifradas, chat persistente con streaming/cancelacion, cliente MCP Streamable HTTP real y tool calling multi-proveedor (OpenAI y Anthropic) orquestado por el backend. RAG pertenece a sprints posteriores.
 
 ## Componentes
 
@@ -17,7 +17,7 @@ flowchart LR
     U["Navegador"] -->|":3000, red chat-ingress"| F["chat-frontend / Nginx"]
     F -->|"/api, red chat-internal"| B["chat-backend"]
     B -->|"JDBC, red chat-internal"| P["chat-postgres + pgvector"]
-    B -.->|"Sprint 4, red ai-platform"| M["Data Platform MCP"]
+    B -.->|"app.mcp.mode=real, red ai-platform"| M["Data Platform MCP"]
     FM["fake-mcp, sólo compose.dev"] -.->|"contrato de prueba"| B
 ```
 
@@ -57,15 +57,17 @@ atomicamente a una sola cuenta, incluso ante registros concurrentes. Los registr
 ALLOW_PUBLIC_REGISTRATION=false
 ```
 
-Para añadir el MCP contractual de pruebas:
+Para ejercitar el cliente MCP real contra el doble contractual WireMock:
 
 ```bash
 docker compose -f compose.yaml -f compose.dev.yaml up --build --wait
 ```
 
-El MCP continua en modo fake. Para LLM, la UI permite configurar el fake determinista o conexiones
-OpenAI, Anthropic, BytePlus, OpenAI-compatible y Ollama. Ninguna prueba automatizada consume APIs
-pagadas; probar una conexion real sólo ocurre por accion explícita del usuario.
+Este overlay activa `MCP_INTEGRATION_MODE=real` mientras conserva `APP_INTEGRATIONS_MODE=fake`, así
+el proveedor LLM `FAKE` gratuito sigue disponible; ambos flags son independientes. Para LLM, la UI
+permite configurar el fake determinista o conexiones OpenAI, Anthropic, BytePlus, OpenAI-compatible
+y Ollama. Ninguna prueba automatizada consume APIs pagadas ni el MCP real de Data Platform; probar
+una conexion real sólo ocurre por accion explícita del usuario.
 
 ## Chat y streaming
 
@@ -80,9 +82,12 @@ Completions, proveedores compatibles y Ollama. Para una prueba local sin coste c
 mensaje parcial se persiste como `CANCELLED` si el usuario detiene la generación o el navegador se
 desconecta.
 
-MCP se muestra como `FAKE` en Sprint 3. La configuracion `MCP_BASE_URL` ya documentada no activa un
-cliente remoto todavía; esa integracion, el discovery de tools y sus tarjetas se reservan para Sprint 4.
-Consulta [Chat y streaming](docs/chat.md) para la API y el ciclo de estados.
+Con una conexion OpenAI o Anthropic real y `app.mcp.mode=real`, el chat ofrece tool calling: el
+backend descubre el catalogo de tools del MCP, valida cada llamada contra ese catalogo, la ejecuta
+en un executor dedicado con timeout y límite de tamaño, y muestra una tarjeta por cada tool call con
+su estado. El panel de solo lectura en `/settings/mcp` muestra el estado `UP`/`DEGRADED`/`DOWN`, el
+contrato negociado y las funciones disponibles. Consulta [Chat y streaming](docs/chat.md) y
+[Integración MCP](docs/mcp-integration.md) para la API y el ciclo de estados.
 
 ## Proveedores y modelos
 
@@ -131,18 +136,21 @@ npm run test:ci
 npm run build
 ```
 
-Las pruebas de navegador de registro inicial, login, proveedor fake y chat SSE se ejecutan con
-`npm run e2e`; requieren instalar Chromium mediante `npx playwright install chromium`. La
-integracion continua replica formato, lint, pruebas, builds y auditoria de dependencias con severidad alta.
+Las pruebas de navegador de registro inicial, login, proveedor fake, chat SSE, panel MCP y tarjetas
+de tool call se ejecutan con `npm run e2e`; requieren instalar Chromium mediante
+`npx playwright install chromium`. La integracion continua replica formato, lint, pruebas, builds y
+auditoria de dependencias con severidad alta.
 
 ## Configuración
 
 `.env.example` contiene sólo marcadores. `CREDENTIAL_MASTER_KEY` es obligatoria, debe ser base64 de
 32 bytes y no debe persistirse en Git. `CREDENTIAL_KEY_VERSION` queda almacenada con cada secreto.
 
-`APP_INTEGRATIONS_MODE=fake` conserva el proveedor y MCP deterministas. Las credenciales reales sólo
-se descifran en backend durante una accion explícita de su propietario, incluida una generacion.
-`CHAT_*` limita timeout, heartbeat, historial enviado y longitud máxima de respuesta.
+`APP_INTEGRATIONS_MODE=fake` conserva el proveedor LLM determinista; `MCP_INTEGRATION_MODE=fake`
+(independiente) conserva el MCP determinista. Las credenciales reales sólo se descifran en backend
+durante una accion explícita de su propietario, incluida una generacion. `CHAT_*` limita timeout,
+heartbeat, historial enviado y longitud máxima de respuesta; `MAX_TOOL_ROUNDS` y
+`MAX_TOOL_RESULT_BYTES` acotan la orquestacion de tool calling.
 
 En produccion deben configurarse `SESSION_COOKIE_SECURE=true` y `CSRF_COOKIE_SECURE=true`, servir
 la aplicacion exclusivamente por HTTPS y conservar el proxy mismo-origen. Consulta
@@ -163,5 +171,5 @@ la aplicacion exclusivamente por HTTPS y conservar el proxy mismo-origen. Consul
 
 ## Estado del roadmap
 
-Sprint 0, Sprint 1, Sprint 2 y Sprint 3 estan implementados. Sprint 4 (MCP remoto y tool calling)
-no debe comenzar sin aprobacion explicita del propietario del proyecto.
+Sprint 0, Sprint 1, Sprint 2, Sprint 3 y Sprint 4 (MCP remoto y tool calling) estan implementados.
+Sprint 5+ (RAG) no debe comenzar sin aprobacion explicita del propietario del proyecto.

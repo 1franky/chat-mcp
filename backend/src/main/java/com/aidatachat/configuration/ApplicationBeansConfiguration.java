@@ -2,6 +2,12 @@ package com.aidatachat.configuration;
 
 import com.aidatachat.adapters.out.fake.FakeLlmProviderAdapter;
 import com.aidatachat.adapters.out.fake.FakeMcpGateway;
+import com.aidatachat.adapters.out.mcp.McpAuthProvider;
+import com.aidatachat.adapters.out.mcp.McpDestinationPolicy;
+import com.aidatachat.adapters.out.mcp.McpHttpClient;
+import com.aidatachat.adapters.out.mcp.McpSessionManager;
+import com.aidatachat.adapters.out.mcp.NoOpMcpAuthProvider;
+import com.aidatachat.adapters.out.mcp.RealMcpGateway;
 import com.aidatachat.adapters.out.provider.AnthropicProviderAdapter;
 import com.aidatachat.adapters.out.provider.BytePlusProviderAdapter;
 import com.aidatachat.adapters.out.provider.ConfiguredLlmChatGateway;
@@ -14,6 +20,7 @@ import com.aidatachat.adapters.out.security.AesGcmCredentialCipherAdapter;
 import com.aidatachat.adapters.out.security.Argon2PasswordHashAdapter;
 import com.aidatachat.adapters.out.security.SpringSessionInvalidationAdapter;
 import com.aidatachat.application.port.in.ChatUseCase;
+import com.aidatachat.application.port.in.McpStatusUseCase;
 import com.aidatachat.application.port.in.SystemStatusUseCase;
 import com.aidatachat.application.port.out.AuditRepository;
 import com.aidatachat.application.port.out.ConversationRepository;
@@ -28,14 +35,17 @@ import com.aidatachat.application.port.out.SessionInvalidationPort;
 import com.aidatachat.application.port.out.UserAccountRepository;
 import com.aidatachat.application.service.ChatService;
 import com.aidatachat.application.service.IdentityService;
+import com.aidatachat.application.service.McpStatusService;
 import com.aidatachat.application.service.ProviderManagementService;
 import com.aidatachat.application.service.SystemStatusService;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -57,12 +67,69 @@ public class ApplicationBeansConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(
-            name = "app.integrations.mode",
-            havingValue = "fake",
-            matchIfMissing = true)
+    @ConditionalOnProperty(name = "app.mcp.mode", havingValue = "fake", matchIfMissing = true)
     FakeMcpGateway fakeMcpGateway() {
         return new FakeMcpGateway();
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "app.mcp.mode", havingValue = "real")
+    McpHttpClient mcpHttpClient(
+            @Value("${app.mcp.http.timeout:10s}") Duration timeout,
+            @Value("${app.mcp.http.max-response-bytes:1048576}") int maxResponseBytes) {
+        return new McpHttpClient(timeout, maxResponseBytes);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "app.mcp.mode", havingValue = "real")
+    McpDestinationPolicy mcpDestinationPolicy() {
+        return new McpDestinationPolicy();
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "app.mcp.mode", havingValue = "real")
+    McpAuthProvider mcpAuthProvider() {
+        return new NoOpMcpAuthProvider();
+    }
+
+    @Bean(destroyMethod = "shutdown")
+    @ConditionalOnProperty(name = "app.mcp.mode", havingValue = "real")
+    ScheduledExecutorService mcpStatusRefreshScheduler() {
+        return Executors.newSingleThreadScheduledExecutor(
+                Thread.ofPlatform().name("mcp-status-refresh").daemon(true).factory());
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "app.mcp.mode", havingValue = "real")
+    RealMcpGateway realMcpGateway(
+            McpHttpClient http,
+            McpDestinationPolicy destinationPolicy,
+            McpAuthProvider auth,
+            ScheduledExecutorService mcpStatusRefreshScheduler,
+            @Value("${app.mcp.base-url}") String baseUrl,
+            @Value("${app.mcp.endpoint}") String endpoint,
+            @Value("${app.mcp.protocol-version}") String protocolVersion,
+            @Value("${app.mcp.required-contract-major}") int requiredContractMajor,
+            @Value("${app.mcp.status-refresh-interval:30s}") Duration statusRefreshInterval,
+            @Value("${info.application.version:development}") String appVersion) {
+        McpSessionManager session =
+                new McpSessionManager(
+                        http,
+                        destinationPolicy,
+                        auth,
+                        baseUrl,
+                        endpoint,
+                        protocolVersion,
+                        requiredContractMajor,
+                        appVersion);
+        mcpStatusRefreshScheduler.scheduleAtFixedRate(
+                session::refresh, 0, statusRefreshInterval.toMillis(), TimeUnit.MILLISECONDS);
+        return new RealMcpGateway(session);
+    }
+
+    @Bean
+    McpStatusUseCase mcpStatusUseCase(McpGateway mcpGateway) {
+        return new McpStatusService(mcpGateway);
     }
 
     @Bean
@@ -151,25 +218,41 @@ public class ApplicationBeansConfiguration {
     ChatUseCase chatUseCase(
             ConversationRepository conversations,
             LlmChatGateway llm,
+            McpGateway mcpGateway,
             AuditRepository audit,
             Clock clock,
             @Value("${app.chat.max-history-messages:200}") int maxHistoryMessages,
             @Value("${app.chat.max-history-characters:200000}") int maxHistoryCharacters,
-            @Value("${app.chat.max-response-characters:1000000}") int maxResponseCharacters) {
+            @Value("${app.chat.max-response-characters:1000000}") int maxResponseCharacters,
+            @Value("${app.chat.max-tool-rounds:6}") int maxToolRounds,
+            @Value("${app.chat.max-tool-result-bytes:1048576}") int maxToolResultBytes,
+            @Value("${app.mcp.tool-call-timeout:20s}") Duration toolCallTimeout,
+            ExecutorService mcpToolOrchestrationExecutor) {
         return new ChatService(
                 conversations,
                 llm,
+                mcpGateway,
                 audit,
                 clock,
                 maxHistoryMessages,
                 maxHistoryCharacters,
-                maxResponseCharacters);
+                maxResponseCharacters,
+                maxToolRounds,
+                maxToolResultBytes,
+                toolCallTimeout,
+                mcpToolOrchestrationExecutor);
     }
 
     @Bean(destroyMethod = "shutdown")
     ScheduledExecutorService chatHeartbeatScheduler() {
         return Executors.newSingleThreadScheduledExecutor(
                 Thread.ofPlatform().name("chat-heartbeat").daemon(true).factory());
+    }
+
+    @Bean(destroyMethod = "shutdown")
+    ExecutorService mcpToolOrchestrationExecutor() {
+        return Executors.newCachedThreadPool(
+                Thread.ofPlatform().name("mcp-tool-orchestration-", 0).daemon(true).factory());
     }
 
     @Bean

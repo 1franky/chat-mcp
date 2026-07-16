@@ -55,7 +55,9 @@ otras cuentas.
   una decision futura.
 - La rotacion de claves de proveedor entre varias versiones sigue pendiente; Sprint 2 carga una
   unica version activa.
-- MCP remoto sigue deshabilitado y sin autenticacion; solo backend pertenece a `ai-platform`.
+- El cliente MCP real (Sprint 4) sigue sin autenticacion porque Data Platform MCP no la tiene todavia;
+  solo backend pertenece a `ai-platform` y `McpAuthProvider` documenta el punto de extension futuro
+  (bearer/OAuth/mTLS) sin cambiar el contrato de `McpGateway`.
 - Una caida abrupta del proceso puede dejar un mensaje `STREAMING`; la reconciliacion de generaciones
   huerfanas queda pendiente de hardening operativo.
 

@@ -65,7 +65,7 @@ info:
   application:
     name: AI Data Chat
     version: "@project.version@"
-    sprint: 3
+    sprint: 4
 
 app:
   chat:
@@ -74,6 +74,8 @@ app:
     max-history-messages: ${CHAT_MAX_HISTORY_MESSAGES:200}
     max-history-characters: ${CHAT_MAX_HISTORY_CHARACTERS:200000}
     max-response-characters: ${CHAT_MAX_RESPONSE_CHARACTERS:1000000}
+    max-tool-rounds: ${MAX_TOOL_ROUNDS:6}
+    max-tool-result-bytes: ${MAX_TOOL_RESULT_BYTES:1048576}
   identity:
     allow-public-registration: ${ALLOW_PUBLIC_REGISTRATION:true}
   security:
@@ -98,7 +100,13 @@ app:
     byteplus:
       ap-southeast-1-base-url: https://ark.ap-southeast.bytepluses.com/api/v3
   mcp:
+    mode: ${MCP_INTEGRATION_MODE:fake}
     base-url: ${MCP_BASE_URL:http://data-platform-mcp:8000}
     endpoint: ${MCP_ENDPOINT:/mcp}
     protocol-version: ${MCP_PROTOCOL_VERSION:2025-11-25}
     required-contract-major: ${MCP_CONTRACT_MAJOR:1}
+    status-refresh-interval: ${MCP_STATUS_REFRESH_INTERVAL:30s}
+    tool-call-timeout: ${MCP_TOOL_CALL_TIMEOUT:20s}
+    http:
+      timeout: ${MCP_HTTP_TIMEOUT:10s}
+      max-response-bytes: ${MCP_HTTP_MAX_RESPONSE_BYTES:1048576}

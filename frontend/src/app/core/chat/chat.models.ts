@@ -19,6 +19,19 @@ export interface ConversationPage {
 
 export type MessageRole = 'USER' | 'ASSISTANT';
 export type MessageStatus = 'STREAMING' | 'COMPLETED' | 'CANCELLED' | 'FAILED';
+export type ToolCallStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'BLOCKED' | 'TIMEOUT';
+
+export interface ToolCallView {
+  id: string;
+  toolName: string;
+  generationRound: number;
+  sequence: number;
+  status: ToolCallStatus;
+  arguments: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  isError: boolean | null;
+  errorCode: string | null;
+}
 
 export interface ConversationMessage {
   id: string;
@@ -37,6 +50,7 @@ export interface ConversationMessage {
   regeneratedFromMessageId: string | null;
   createdAt: string;
   updatedAt: string;
+  toolCalls: ToolCallView[];
 }
 
 export interface CreateConversationRequest {
@@ -46,13 +60,14 @@ export interface CreateConversationRequest {
 }
 
 export interface GenerationEvent {
-  type: 'generation' | 'delta' | 'complete' | 'cancelled' | 'error';
+  type: 'generation' | 'delta' | 'complete' | 'cancelled' | 'error' | 'tool_call' | 'tool_result';
   generationId: string;
   userMessage: ConversationMessage | null;
   assistantMessage: ConversationMessage | null;
   delta: string | null;
   errorCode: string | null;
   retryable: boolean;
+  toolCall: ToolCallView | null;
 }
 
 export interface McpSummary {

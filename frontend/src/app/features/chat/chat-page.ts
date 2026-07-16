@@ -11,13 +11,14 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged } from 'rxjs';
 import {
   Conversation,
   ConversationMessage,
   GenerationEvent,
   McpSummary,
+  ToolCallView,
 } from '../../core/chat/chat.models';
 import { chatErrorMessage, ChatService } from '../../core/chat/chat.service';
 import { renderSafeMarkdown } from '../../core/chat/safe-markdown';
@@ -30,7 +31,7 @@ import { ProviderService } from '../../core/providers/provider.service';
 
 @Component({
   selector: 'app-chat-page',
-  imports: [MatButtonModule, MatProgressSpinnerModule, ReactiveFormsModule],
+  imports: [MatButtonModule, MatProgressSpinnerModule, ReactiveFormsModule, RouterLink],
   templateUrl: './chat-page.html',
   styleUrl: './chat-page.scss',
 })
@@ -324,6 +325,25 @@ export class ChatPage {
     }[status];
   }
 
+  protected toolCallStatusLabel(status: ToolCallView['status']): string {
+    return {
+      PENDING: 'Pendiente',
+      RUNNING: 'Ejecutando…',
+      COMPLETED: 'Completado',
+      FAILED: 'Error',
+      BLOCKED: 'Bloqueado',
+      TIMEOUT: 'Tiempo agotado',
+    }[status];
+  }
+
+  protected toolCallPreview(value: Record<string, unknown> | null): string {
+    if (!value || Object.keys(value).length === 0) {
+      return '—';
+    }
+    const text = JSON.stringify(value);
+    return text.length > 160 ? text.slice(0, 160) + '…' : text;
+  }
+
   private beginStream(conversation: Conversation, content: string): void {
     this.form.controls.content.reset();
     this.generating.set(true);
@@ -348,6 +368,11 @@ export class ChatPage {
       }
     } else if (event.assistantMessage) {
       this.upsertMessage(event.assistantMessage);
+    }
+    if (event.type === 'tool_call' || event.type === 'tool_result') {
+      if (event.assistantMessage && event.toolCall) {
+        this.upsertToolCall(event.assistantMessage.id, event.toolCall);
+      }
     }
     if (event.type === 'error') {
       this.error.set(
@@ -510,10 +535,33 @@ export class ChatPage {
   }
 
   private upsertMessage(message: ConversationMessage): void {
-    this.messages.update((items) =>
-      [...items.filter((item) => item.id !== message.id), message].sort(
+    this.messages.update((items) => {
+      const previous = items.find((item) => item.id === message.id);
+      const merged =
+        message.toolCalls.length === 0 && previous && previous.toolCalls.length > 0
+          ? { ...message, toolCalls: previous.toolCalls }
+          : message;
+      return [...items.filter((item) => item.id !== message.id), merged].sort(
         (left, right) => left.position - right.position,
-      ),
+      );
+    });
+  }
+
+  private upsertToolCall(messageId: string, toolCall: ToolCallView): void {
+    this.messages.update((items) =>
+      items.map((item) => {
+        if (item.id !== messageId) {
+          return item;
+        }
+        const toolCalls = [
+          ...item.toolCalls.filter((existing) => existing.id !== toolCall.id),
+          toolCall,
+        ].sort(
+          (left, right) =>
+            left.generationRound - right.generationRound || left.sequence - right.sequence,
+        );
+        return { ...item, toolCalls };
+      }),
     );
   }
 

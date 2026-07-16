@@ -20,6 +20,11 @@ export const routes: Routes = [
       import('./features/providers/providers-page').then((module) => module.ProvidersPage),
   },
   {
+    path: 'settings/mcp',
+    canActivate: [authenticatedGuard],
+    loadComponent: () => import('./features/mcp/mcp-page').then((module) => module.McpPage),
+  },
+  {
     path: 'chat',
     canActivate: [authenticatedGuard],
     loadComponent: () => import('./features/chat/chat-page').then((module) => module.ChatPage),

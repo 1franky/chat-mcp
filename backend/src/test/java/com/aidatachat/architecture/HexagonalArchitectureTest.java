@@ -30,4 +30,13 @@ class HexagonalArchitectureTest {
                     .dependOnClassesThat()
                     .resideInAnyPackage(
                             "..adapters..", "..configuration..", "..infrastructure..", "..web..");
+
+    @ArchTest
+    static final ArchRule APPLICATION_HAS_NO_SDK_DEPENDENCIES =
+            noClasses()
+                    .that()
+                    .resideInAPackage("..application..")
+                    .should()
+                    .dependOnClassesThat()
+                    .resideInAnyPackage("org.springframework.ai..", "io.modelcontextprotocol..");
 }
