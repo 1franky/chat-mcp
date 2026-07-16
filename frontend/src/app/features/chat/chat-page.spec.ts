@@ -62,12 +62,70 @@ describe('ChatPage', () => {
 
     http.expectOne('/api/conversations/conversation-1').flush(null);
   });
+
+  it('keeps the sidebar open when selecting another conversation and deletes it from the sidebar row', () => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: (query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+    });
+
+    const fixture = TestBed.createComponent(ChatPage);
+
+    http.expectOne('/api/conversations?query=&page=0&size=30').flush({
+      items: [conversation(), conversation('conversation-2', 'Segunda')],
+      page: 0,
+      size: 30,
+      totalElements: 2,
+      totalPages: 1,
+    });
+    http.expectOne('/api/system/status').flush({
+      sprint: 3,
+      mode: 'fake',
+      mcp: { state: 'UP', protocolVersion: 'test', contractVersion: '1.0.0' },
+    });
+    const providersRequest = http.expectOne('/api/providers');
+    http.expectOne('/api/conversations/conversation-1').flush(conversation());
+    http.expectOne('/api/providers/provider-1/models').flush([model()]);
+    http.expectOne('/api/conversations/conversation-1/messages').flush([]);
+    providersRequest.flush([provider()]);
+    fixture.detectChanges();
+
+    const shell = fixture.nativeElement.querySelector('.chat-shell') as HTMLElement;
+    expect(shell.classList.contains('chat-shell--collapsed')).toBe(false);
+
+    const conversationButtons = [
+      ...fixture.nativeElement.querySelectorAll('.conversation-item'),
+    ] as HTMLButtonElement[];
+    conversationButtons[1].click();
+    fixture.detectChanges();
+    expect(shell.classList.contains('chat-shell--collapsed')).toBe(false);
+
+    const deleteButtons = [
+      ...fixture.nativeElement.querySelectorAll('.conversation-delete'),
+    ] as HTMLButtonElement[];
+    expect(deleteButtons.length).toBe(2);
+    deleteButtons[1].click();
+    fixture.detectChanges();
+    expect(deleteButtons[1].textContent?.trim()).toBe('✓');
+    deleteButtons[1].click();
+
+    http.expectOne('/api/conversations/conversation-2').flush(null);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelectorAll('.conversation-item').length).toBe(1);
+  });
 });
 
-function conversation() {
+function conversation(id = 'conversation-1', title = 'Prueba') {
   return {
-    id: 'conversation-1',
-    title: 'Prueba',
+    id,
+    title,
     providerConnectionId: 'provider-1',
     modelId: 'fake-chat-v1',
     createdAt: '2026-07-15T00:00:00Z',

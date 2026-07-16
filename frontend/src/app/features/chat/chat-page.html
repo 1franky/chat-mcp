@@ -26,16 +26,34 @@
         <p class="sidebar-state">Todavia no hay conversaciones.</p>
       } @else {
         @for (conversation of conversations(); track conversation.id) {
-          <button
-            type="button"
-            class="conversation-item"
-            [class.conversation-item--active]="activeConversation()?.id === conversation.id"
-            [disabled]="generating()"
-            (click)="openConversation(conversation)"
+          <div
+            class="conversation-row"
+            [class.conversation-row--active]="activeConversation()?.id === conversation.id"
           >
-            <strong>{{ conversation.title }}</strong>
-            <small>{{ conversation.modelId }}</small>
-          </button>
+            <button
+              type="button"
+              class="conversation-item"
+              [class.conversation-item--active]="activeConversation()?.id === conversation.id"
+              [disabled]="generating()"
+              (click)="openConversation(conversation)"
+            >
+              <strong>{{ conversation.title }}</strong>
+              <small>{{ conversation.modelId }}</small>
+            </button>
+            <button
+              type="button"
+              class="conversation-delete"
+              [disabled]="generating()"
+              [attr.aria-label]="
+                pendingDeleteId() === conversation.id
+                  ? 'Confirmar eliminar ' + conversation.title
+                  : 'Eliminar ' + conversation.title
+              "
+              (click)="deleteFromSidebar(conversation, $event)"
+            >
+              {{ pendingDeleteId() === conversation.id ? '✓' : '✕' }}
+            </button>
+          </div>
         }
       }
     </nav>

@@ -58,9 +58,10 @@ export class ChatPage {
   protected readonly generating = signal(false);
   protected readonly stopping = signal(false);
   protected readonly activeGenerationId = signal<string | null>(null);
-  protected readonly sidebarCollapsed = signal(false);
+  protected readonly sidebarCollapsed = signal(this.isMobileViewport());
   protected readonly renaming = signal(false);
   protected readonly deleteConfirmation = signal(false);
+  protected readonly pendingDeleteId = signal<string | null>(null);
   protected readonly error = signal('');
   protected readonly notice = signal('');
 
@@ -120,6 +121,10 @@ export class ChatPage {
     this.activeConversation.set(null);
     this.messages.set([]);
     this.form.controls.content.reset();
+    this.pendingDeleteId.set(null);
+    if (this.isMobileViewport()) {
+      this.sidebarCollapsed.set(true);
+    }
     void this.router.navigate(['/chat']);
   }
 
@@ -127,8 +132,39 @@ export class ChatPage {
     if (this.generating()) {
       return;
     }
-    this.sidebarCollapsed.set(true);
+    this.pendingDeleteId.set(null);
+    if (this.isMobileViewport()) {
+      this.sidebarCollapsed.set(true);
+    }
     void this.router.navigate(['/chat', conversation.id]);
+  }
+
+  protected deleteFromSidebar(conversation: Conversation, event: Event): void {
+    event.stopPropagation();
+    if (this.generating()) {
+      return;
+    }
+    if (this.pendingDeleteId() !== conversation.id) {
+      this.pendingDeleteId.set(conversation.id);
+      return;
+    }
+    this.pendingDeleteId.set(null);
+    this.chat
+      .delete(conversation.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.conversations.update((items) => items.filter((item) => item.id !== conversation.id));
+          if (this.activeConversation()?.id === conversation.id) {
+            this.newConversation();
+          }
+        },
+        error: (error) => this.fail(error),
+      });
+  }
+
+  private isMobileViewport(): boolean {
+    return typeof matchMedia === 'function' && matchMedia('(max-width: 860px)').matches;
   }
 
   protected providerChanged(): void {
