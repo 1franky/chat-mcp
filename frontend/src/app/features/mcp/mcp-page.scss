@@ -1,0 +1,194 @@
+:host {
+  display: block;
+}
+
+.mcp-shell {
+  width: min(920px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 2.5rem 0 4rem;
+}
+
+.heading {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 1.25rem;
+  align-items: start;
+  margin-bottom: 1.5rem;
+}
+
+.heading h1,
+.heading p,
+.tools-panel h2 {
+  margin: 0;
+}
+
+.heading h1 {
+  margin-bottom: 0.4rem;
+  color: var(--text-primary);
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  letter-spacing: -0.04em;
+}
+
+.heading p {
+  max-width: 640px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.eyebrow {
+  padding-top: 0.45rem;
+  color: var(--brand-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.message {
+  margin: 0 0 1rem;
+  padding: 0.8rem 1rem;
+  border-radius: 0.8rem;
+}
+
+.message--error {
+  border: 1px solid var(--danger-border);
+  background: var(--danger-surface);
+  color: var(--danger-text);
+}
+
+.loading {
+  display: grid;
+  gap: 0.45rem;
+  justify-items: center;
+  padding: 2rem 1rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: 0.9rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.status-card {
+  margin-bottom: 1.25rem;
+  border-radius: 1rem;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+}
+
+.state,
+.readonly {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  background: var(--badge-neutral);
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.state[data-state='UP'],
+.readonly[data-value='true'] {
+  background: var(--success-surface);
+  color: var(--success-text);
+}
+
+.state[data-state='DEGRADED'] {
+  background: var(--warning-surface);
+  color: var(--warning-text);
+}
+
+.state[data-state='DOWN'],
+.readonly[data-value='false'] {
+  background: var(--danger-surface);
+  color: var(--danger-text);
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 1.5rem;
+  margin: 0;
+}
+
+.status-grid dt {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.status-grid dd {
+  margin: 0.15rem 0 0;
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.tools-panel {
+  padding: 1.2rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 1rem;
+  background: var(--surface-raised);
+}
+
+.tools-panel h2 {
+  color: var(--text-primary);
+  font-size: 1.15rem;
+}
+
+.tool-list {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.9rem;
+}
+
+.tool-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.8rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+}
+
+.tool-item > div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.tool-item strong {
+  color: var(--text-primary);
+}
+
+.tool-item span {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.empty {
+  padding: 1.5rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: 0.9rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .mcp-shell {
+    width: min(100% - 1rem, 920px);
+    padding-top: 1.25rem;
+  }
+
+  .heading {
+    grid-template-columns: 1fr auto;
+  }
+
+  .eyebrow {
+    grid-column: 1 / -1;
+  }
+
+  .status-grid,
+  .tool-item {
+    grid-template-columns: 1fr;
+  }
+}

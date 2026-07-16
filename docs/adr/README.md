@@ -10,3 +10,4 @@ Los ADRs son inmutables una vez reemplazados: una decisión nueva debe enlazar y
 - [ADR-0006 — Identidad, sesiones y bootstrap atomico](0006-identity-sessions-and-bootstrap.md)
 - [ADR-0007 — Credenciales por usuario y salida a proveedores](0007-provider-credentials-and-egress.md)
 - [ADR-0008 — Ciclo de generación persistente y SSE](0008-persistent-generation-and-sse.md)
+- [ADR-0009 — Cliente MCP Streamable HTTP y orquestación de tool calling](0009-mcp-streamable-http-client.md)

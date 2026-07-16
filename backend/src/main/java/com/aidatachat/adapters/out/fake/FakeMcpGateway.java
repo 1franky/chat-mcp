@@ -43,9 +43,9 @@ public final class FakeMcpGateway implements McpGateway {
 
         return List.of(
                 new McpToolDefinition(
-                        "health_check", "Returns deterministic fake health", noArguments),
+                        "health_check", "Returns deterministic fake health", noArguments, true),
                 new McpToolDefinition(
-                        "hello_world", "Returns a deterministic greeting", helloArguments));
+                        "hello_world", "Returns a deterministic greeting", helloArguments, true));
     }
 
     @Override
@@ -61,7 +61,8 @@ public final class FakeMcpGateway implements McpGateway {
             case "health_check" ->
                     new McpToolResult(
                             toolName,
-                            true,
+                            false,
+                            List.of("Fake MCP is healthy"),
                             Map.of(
                                     "status",
                                     "ok",
@@ -71,8 +72,12 @@ public final class FakeMcpGateway implements McpGateway {
                                     true));
             case "hello_world" -> {
                 Object name = arguments.getOrDefault("name", "mundo");
+                String message = "Hola, " + name + ".";
                 yield new McpToolResult(
-                        toolName, true, Map.of("message", "Hola, " + name + ".", "fake", true));
+                        toolName,
+                        false,
+                        List.of(message),
+                        Map.of("message", message, "fake", true));
             }
             default -> throw new IllegalStateException("Allowlist and switch are inconsistent");
         };

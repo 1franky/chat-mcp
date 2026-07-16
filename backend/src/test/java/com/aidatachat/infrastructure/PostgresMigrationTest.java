@@ -69,6 +69,14 @@ class PostgresMigrationTest {
                                 + "AND table_name IN ('conversation', 'message') "
                                 + "ORDER BY table_name",
                         String.class);
+        List<String> sprintFourTables =
+                jdbcTemplate.queryForList(
+                        "SELECT table_schema || '.' || table_name "
+                                + "FROM information_schema.tables "
+                                + "WHERE table_schema = 'chat' "
+                                + "AND table_name = 'message_tool_call' "
+                                + "ORDER BY table_name",
+                        String.class);
 
         assertThat(vectorExtensions).isOne();
         assertThat(schemas).containsExactly("audit", "chat", "identity", "rag");
@@ -81,5 +89,6 @@ class PostgresMigrationTest {
         assertThat(sprintTwoTables)
                 .containsExactly("chat.provider_connection", "chat.provider_model");
         assertThat(sprintThreeTables).containsExactly("chat.conversation", "chat.message");
+        assertThat(sprintFourTables).containsExactly("chat.message_tool_call");
     }
 }

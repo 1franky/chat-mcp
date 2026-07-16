@@ -7,54 +7,90 @@ import com.aidatachat.application.port.in.ChatUseCase;
 import com.aidatachat.application.port.out.AuditRepository;
 import com.aidatachat.application.port.out.ConversationRepository;
 import com.aidatachat.application.port.out.LlmChatGateway;
+import com.aidatachat.application.port.out.McpGateway;
 import com.aidatachat.domain.model.ChatMessage;
 import com.aidatachat.domain.model.Conversation;
 import com.aidatachat.domain.model.ConversationMessage;
+import com.aidatachat.domain.model.ConversationToolCall;
+import com.aidatachat.domain.model.IntegrationState;
 import com.aidatachat.domain.model.LlmChunk;
+import com.aidatachat.domain.model.LlmToolCall;
+import com.aidatachat.domain.model.LlmToolCallDelta;
+import com.aidatachat.domain.model.McpToolDefinition;
+import com.aidatachat.domain.model.McpToolResult;
 import com.aidatachat.domain.model.MessageRole;
 import com.aidatachat.domain.model.MessageStatus;
+import com.aidatachat.domain.model.MessageToolCallStatus;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Flow;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 public final class ChatService implements ChatUseCase {
 
     private static final String DEFAULT_TITLE = "Nueva conversacion";
     private static final int MAX_TITLE_LENGTH = 160;
     private static final int MAX_MESSAGE_LENGTH = 32_000;
+    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final TypeReference<Map<String, Object>> ARGUMENTS_TYPE =
+            new TypeReference<>() {};
 
     private final ConversationRepository conversations;
     private final LlmChatGateway llm;
+    private final McpGateway mcp;
     private final AuditRepository audit;
     private final Clock clock;
     private final int maxHistoryMessages;
     private final int maxHistoryCharacters;
     private final int maxResponseCharacters;
+    private final int maxToolRounds;
+    private final int maxToolResultBytes;
+    private final Duration toolCallTimeout;
+    private final ExecutorService toolOrchestrationExecutor;
     private final Map<UUID, GenerationState> activeById = new ConcurrentHashMap<>();
     private final Map<UUID, UUID> activeByConversation = new ConcurrentHashMap<>();
 
     public ChatService(
             ConversationRepository conversations,
             LlmChatGateway llm,
+            McpGateway mcp,
             AuditRepository audit,
             Clock clock,
             int maxHistoryMessages,
             int maxHistoryCharacters,
-            int maxResponseCharacters) {
+            int maxResponseCharacters,
+            int maxToolRounds,
+            int maxToolResultBytes,
+            Duration toolCallTimeout,
+            ExecutorService toolOrchestrationExecutor) {
         this.conversations = Objects.requireNonNull(conversations);
         this.llm = Objects.requireNonNull(llm);
+        this.mcp = Objects.requireNonNull(mcp);
         this.audit = Objects.requireNonNull(audit);
         this.clock = Objects.requireNonNull(clock);
         this.maxHistoryMessages = positive(maxHistoryMessages, "maxHistoryMessages");
         this.maxHistoryCharacters = positive(maxHistoryCharacters, "maxHistoryCharacters");
         this.maxResponseCharacters = positive(maxResponseCharacters, "maxResponseCharacters");
+        this.maxToolRounds = positive(maxToolRounds, "maxToolRounds");
+        this.maxToolResultBytes = positive(maxToolResultBytes, "maxToolResultBytes");
+        this.toolCallTimeout = Objects.requireNonNull(toolCallTimeout);
+        this.toolOrchestrationExecutor = Objects.requireNonNull(toolOrchestrationExecutor);
     }
 
     @Override
@@ -191,8 +227,20 @@ public final class ChatService implements ChatUseCase {
     @Override
     public List<MessageView> listMessages(UUID ownerId, UUID conversationId) {
         findOwned(ownerId, conversationId);
-        return conversations.findMessages(conversationId, ownerId).stream()
-                .map(this::toView)
+        List<ConversationMessage> messages = conversations.findMessages(conversationId, ownerId);
+        Map<UUID, List<ConversationToolCall>> toolCallsByMessage =
+                conversations.findToolCallsForMessages(
+                        messages.stream().map(ConversationMessage::id).toList());
+        return messages.stream()
+                .map(
+                        message ->
+                                toView(
+                                        message,
+                                        toolCallsByMessage
+                                                .getOrDefault(message.id(), List.of())
+                                                .stream()
+                                                .map(this::toView)
+                                                .toList()))
                 .toList();
     }
 
@@ -205,7 +253,8 @@ public final class ChatService implements ChatUseCase {
                 conversations.findMessages(conversation.id(), conversation.ownerId());
         List<ChatMessage> prompt = prompt(existing, null);
         prompt.add(new ChatMessage("user", userContent));
-        LlmChatGateway.ChatStream stream = stream(conversation, prompt);
+        List<McpToolDefinition> tools = offeredTools();
+        LlmChatGateway.ChatStream stream = stream(conversation, prompt, tools);
         Instant now = clock.instant();
         ConversationRepository.GenerationMessages created =
                 conversations.createGeneration(
@@ -220,6 +269,8 @@ public final class ChatService implements ChatUseCase {
                         now);
         return register(
                 conversation,
+                prompt,
+                tools,
                 created.userMessage(),
                 created.assistantMessage(),
                 stream.publisher(),
@@ -242,7 +293,8 @@ public final class ChatService implements ChatUseCase {
         if (prompt.isEmpty() || !"user".equals(prompt.getLast().role())) {
             throw new ChatConflictException("The response cannot be regenerated without a prompt");
         }
-        LlmChatGateway.ChatStream stream = stream(conversation, prompt);
+        List<McpToolDefinition> tools = offeredTools();
+        LlmChatGateway.ChatStream stream = stream(conversation, prompt, tools);
         ConversationMessage assistant =
                 conversations.createRegeneration(
                         conversation.id(),
@@ -253,7 +305,8 @@ public final class ChatService implements ChatUseCase {
                         stream.providerType(),
                         stream.modelId(),
                         clock.instant());
-        return register(conversation, null, assistant, stream.publisher(), remoteAddress);
+        return register(
+                conversation, prompt, tools, null, assistant, stream.publisher(), remoteAddress);
     }
 
     @Override
@@ -277,8 +330,18 @@ public final class ChatService implements ChatUseCase {
                 Map.of("generation_id", generationId.toString()));
     }
 
+    private List<McpToolDefinition> offeredTools() {
+        try {
+            return mcp.status().state() == IntegrationState.DOWN ? List.of() : mcp.discoverTools();
+        } catch (RuntimeException exception) {
+            return List.of();
+        }
+    }
+
     private GenerationSession register(
             Conversation conversation,
+            List<ChatMessage> prompt,
+            List<McpToolDefinition> offeredTools,
             ConversationMessage userMessage,
             ConversationMessage assistantMessage,
             Flow.Publisher<LlmChunk> upstream,
@@ -287,8 +350,9 @@ public final class ChatService implements ChatUseCase {
         GenerationState state =
                 new GenerationState(
                         generationId,
-                        conversation.ownerId(),
-                        conversation.id(),
+                        conversation,
+                        new ArrayList<>(prompt),
+                        offeredTools,
                         userMessage,
                         assistantMessage,
                         upstream,
@@ -319,7 +383,8 @@ public final class ChatService implements ChatUseCase {
         return new GenerationSession(generationId, new GenerationPublisher(state));
     }
 
-    private LlmChatGateway.ChatStream stream(Conversation conversation, List<ChatMessage> prompt) {
+    private LlmChatGateway.ChatStream stream(
+            Conversation conversation, List<ChatMessage> prompt, List<McpToolDefinition> tools) {
         if (conversation.providerConnectionId() == null) {
             throw new ChatConflictException("The conversation provider is no longer available");
         }
@@ -327,7 +392,8 @@ public final class ChatService implements ChatUseCase {
                 conversation.ownerId(),
                 conversation.providerConnectionId(),
                 conversation.modelId(),
-                List.copyOf(prompt));
+                List.copyOf(prompt),
+                tools);
     }
 
     private List<ChatMessage> prompt(List<ConversationMessage> messages, Long beforePosition) {
@@ -383,6 +449,10 @@ public final class ChatService implements ChatUseCase {
     }
 
     private MessageView toView(ConversationMessage message) {
+        return toView(message, List.of());
+    }
+
+    private MessageView toView(ConversationMessage message, List<ToolCallView> toolCalls) {
         return new MessageView(
                 message.id(),
                 message.conversationId(),
@@ -399,7 +469,21 @@ public final class ChatService implements ChatUseCase {
                 message.providerRequestId(),
                 message.regeneratedFromMessageId(),
                 message.createdAt(),
-                message.updatedAt());
+                message.updatedAt(),
+                toolCalls);
+    }
+
+    private ToolCallView toView(ConversationToolCall toolCall) {
+        return new ToolCallView(
+                toolCall.id(),
+                toolCall.toolName(),
+                toolCall.generationRound(),
+                toolCall.sequence(),
+                toolCall.status().name(),
+                toolCall.arguments(),
+                toolCall.result(),
+                toolCall.isError(),
+                toolCall.errorCode());
     }
 
     private String optionalTitle(String title) {
@@ -448,17 +532,22 @@ public final class ChatService implements ChatUseCase {
                         Map.copyOf(metadata)));
     }
 
-    private final class GenerationState implements Flow.Subscriber<LlmChunk> {
+    private final class GenerationState {
 
         private final UUID generationId;
         private final UUID ownerId;
         private final UUID conversationId;
+        private final Conversation conversation;
+        private final List<ChatMessage> promptSoFar;
+        private final List<McpToolDefinition> offeredTools;
         private final ConversationMessage userMessage;
         private final UUID assistantMessageId;
         private final Flow.Publisher<LlmChunk> upstream;
         private final String remoteAddress;
         private final AtomicBoolean terminal = new AtomicBoolean();
         private final StringBuilder content = new StringBuilder();
+        private final StringBuilder roundText = new StringBuilder();
+        private final Map<Integer, ToolCallAccumulator> pendingToolCalls = new LinkedHashMap<>();
         private Flow.Subscriber<? super GenerationEvent> downstream;
         private Flow.Subscription upstreamSubscription;
         private ConversationMessage assistantMessage;
@@ -466,18 +555,23 @@ public final class ChatService implements ChatUseCase {
         private Integer outputTokens;
         private String finishReason;
         private String providerRequestId;
+        private int round;
 
         private GenerationState(
                 UUID generationId,
-                UUID ownerId,
-                UUID conversationId,
+                Conversation conversation,
+                List<ChatMessage> promptSoFar,
+                List<McpToolDefinition> offeredTools,
                 ConversationMessage userMessage,
                 ConversationMessage assistantMessage,
                 Flow.Publisher<LlmChunk> upstream,
                 String remoteAddress) {
             this.generationId = generationId;
-            this.ownerId = ownerId;
-            this.conversationId = conversationId;
+            this.ownerId = conversation.ownerId();
+            this.conversationId = conversation.id();
+            this.conversation = conversation;
+            this.promptSoFar = promptSoFar;
+            this.offeredTools = offeredTools;
             this.userMessage = userMessage;
             this.assistantMessageId = assistantMessage.id();
             this.assistantMessage = assistantMessage;
@@ -498,12 +592,15 @@ public final class ChatService implements ChatUseCase {
                 return;
             }
             emit(GenerationEvent.started(generationId, view(userMessage), view(assistantMessage)));
-            upstream.subscribe(this);
+            subscribeUpstream(upstream);
         }
 
-        @Override
-        public synchronized void onSubscribe(Flow.Subscription subscription) {
-            if (terminal.get()) {
+        private void subscribeUpstream(Flow.Publisher<LlmChunk> publisher) {
+            publisher.subscribe(new RoundSubscriber(round));
+        }
+
+        private synchronized void handleSubscribe(int token, Flow.Subscription subscription) {
+            if (token != round || terminal.get()) {
                 subscription.cancel();
                 return;
             }
@@ -511,9 +608,8 @@ public final class ChatService implements ChatUseCase {
             subscription.request(Long.MAX_VALUE);
         }
 
-        @Override
-        public synchronized void onNext(LlmChunk chunk) {
-            if (terminal.get()) {
+        private synchronized void handleNext(int token, LlmChunk chunk) {
+            if (token != round || terminal.get()) {
                 return;
             }
             if (content.length() + chunk.content().length() > maxResponseCharacters) {
@@ -521,6 +617,7 @@ public final class ChatService implements ChatUseCase {
                 return;
             }
             content.append(chunk.content());
+            roundText.append(chunk.content());
             if (chunk.inputTokens() != null) {
                 inputTokens = chunk.inputTokens();
             }
@@ -533,17 +630,28 @@ public final class ChatService implements ChatUseCase {
             if (chunk.providerRequestId() != null) {
                 providerRequestId = bounded(chunk.providerRequestId(), 200);
             }
+            for (LlmToolCallDelta delta : chunk.toolCalls()) {
+                pendingToolCalls
+                        .computeIfAbsent(delta.index(), ignored -> new ToolCallAccumulator())
+                        .merge(delta);
+            }
             assistantMessage = persist(MessageStatus.STREAMING, null);
             if (!chunk.content().isEmpty()) {
                 emit(GenerationEvent.delta(generationId, view(assistantMessage), chunk.content()));
             }
             if (chunk.finished()) {
-                complete();
+                if (isToolCallFinish(finishReason) && !pendingToolCalls.isEmpty()) {
+                    beginToolRound();
+                } else {
+                    complete();
+                }
             }
         }
 
-        @Override
-        public synchronized void onError(Throwable throwable) {
+        private synchronized void handleError(int token, Throwable throwable) {
+            if (token != round || terminal.get()) {
+                return;
+            }
             if (throwable instanceof ProviderCommunicationException providerFailure) {
                 if (providerFailure.providerRequestId() != null) {
                     providerRequestId = bounded(providerFailure.providerRequestId(), 200);
@@ -554,9 +662,286 @@ public final class ChatService implements ChatUseCase {
             }
         }
 
-        @Override
-        public synchronized void onComplete() {
+        private synchronized void handleComplete(int token) {
+            if (token != round || terminal.get()) {
+                return;
+            }
             complete();
+        }
+
+        private boolean isToolCallFinish(String reason) {
+            return "tool_calls".equals(reason) || "tool_use".equals(reason);
+        }
+
+        private void beginToolRound() {
+            round++;
+            if (round > maxToolRounds) {
+                fail("MCP_TOOL_ROUNDS_EXCEEDED", false, null);
+                return;
+            }
+            Map<Integer, ToolCallAccumulator> frozen = new LinkedHashMap<>(pendingToolCalls);
+            pendingToolCalls.clear();
+            String roundAssistantText = roundText.toString();
+            roundText.setLength(0);
+
+            List<PreparedCall> prepared = new ArrayList<>();
+            int sequence = 0;
+            for (ToolCallAccumulator accumulator : frozen.values()) {
+                UUID toolCallId = UUID.randomUUID();
+                String providerToolCallId =
+                        accumulator.providerToolCallId != null
+                                ? accumulator.providerToolCallId
+                                : toolCallId.toString();
+                String toolName = accumulator.toolName != null ? accumulator.toolName : "unknown";
+                ParsedArguments parsed = parseArguments(accumulator.arguments.toString());
+                Instant now = clock.instant();
+                conversations.recordToolCall(
+                        conversationId,
+                        ownerId,
+                        assistantMessageId,
+                        toolCallId,
+                        round,
+                        sequence,
+                        toolName,
+                        providerToolCallId,
+                        parsed.arguments(),
+                        MessageToolCallStatus.PENDING,
+                        now);
+                emit(
+                        GenerationEvent.toolCallRequested(
+                                generationId,
+                                view(assistantMessage),
+                                new ToolCallView(
+                                        toolCallId,
+                                        toolName,
+                                        round,
+                                        sequence,
+                                        MessageToolCallStatus.PENDING.name(),
+                                        parsed.arguments(),
+                                        null,
+                                        null,
+                                        null)));
+                prepared.add(
+                        new PreparedCall(
+                                toolCallId,
+                                providerToolCallId,
+                                toolName,
+                                parsed.arguments(),
+                                parsed.valid(),
+                                sequence));
+                sequence++;
+            }
+
+            int roundToken = round;
+            toolOrchestrationExecutor.execute(
+                    () -> runToolRound(roundToken, prepared, roundAssistantText));
+        }
+
+        private void runToolRound(
+                int roundToken, List<PreparedCall> prepared, String roundAssistantText) {
+            List<LlmToolCall> callsForPrompt = new ArrayList<>();
+            for (PreparedCall call : prepared) {
+                callsForPrompt.add(
+                        new LlmToolCall(
+                                call.providerToolCallId(), call.toolName(), call.arguments()));
+            }
+            List<ChatMessage> toolMessages = new ArrayList<>();
+            for (PreparedCall call : prepared) {
+                if (isStale(roundToken)) {
+                    return;
+                }
+                ToolExecutionOutcome outcome = executeTool(call);
+                synchronized (GenerationState.this) {
+                    if (isStaleLocked(roundToken)) {
+                        return;
+                    }
+                    emit(
+                            GenerationEvent.toolCallCompleted(
+                                    generationId,
+                                    view(assistantMessage),
+                                    new ToolCallView(
+                                            call.id(),
+                                            call.toolName(),
+                                            roundToken,
+                                            call.sequence(),
+                                            outcome.status().name(),
+                                            call.arguments(),
+                                            outcome.result(),
+                                            outcome.isError(),
+                                            outcome.errorCode())));
+                }
+                toolMessages.add(
+                        new ChatMessage(
+                                "tool",
+                                outcome.resultText(),
+                                List.of(),
+                                call.providerToolCallId(),
+                                call.toolName()));
+            }
+
+            synchronized (GenerationState.this) {
+                if (isStaleLocked(roundToken)) {
+                    return;
+                }
+                promptSoFar.add(
+                        new ChatMessage(
+                                "assistant", roundAssistantText, callsForPrompt, null, null));
+                promptSoFar.addAll(toolMessages);
+                LlmChatGateway.ChatStream nextStream;
+                try {
+                    nextStream =
+                            llm.stream(
+                                    conversation.ownerId(),
+                                    conversation.providerConnectionId(),
+                                    conversation.modelId(),
+                                    List.copyOf(promptSoFar),
+                                    offeredTools);
+                } catch (RuntimeException exception) {
+                    fail("MCP_TOOL_ROUND_FAILED", true, exception);
+                    return;
+                }
+                subscribeUpstream(nextStream.publisher());
+            }
+        }
+
+        private boolean isStale(int roundToken) {
+            synchronized (GenerationState.this) {
+                return isStaleLocked(roundToken);
+            }
+        }
+
+        private boolean isStaleLocked(int roundToken) {
+            return terminal.get() || roundToken != round;
+        }
+
+        private ToolExecutionOutcome executeTool(PreparedCall call) {
+            if (!call.argumentsValid()) {
+                return blockedOutcome(
+                        call, "MCP_INVALID_TOOL_ARGUMENTS", "Tool arguments are not valid JSON");
+            }
+            boolean allowed =
+                    offeredTools.stream().anyMatch(tool -> tool.name().equals(call.toolName()));
+            if (!allowed) {
+                return blockedOutcome(
+                        call, "MCP_TOOL_NOT_ALLOWED", "Tool is not in the MCP allowlist");
+            }
+            conversations.updateToolCallResult(
+                    conversationId,
+                    ownerId,
+                    call.id(),
+                    MessageToolCallStatus.RUNNING,
+                    null,
+                    null,
+                    null,
+                    null);
+            Future<McpToolResult> future =
+                    toolOrchestrationExecutor.submit(
+                            () -> mcp.call(call.toolName(), call.arguments()));
+            try {
+                McpToolResult result =
+                        future.get(toolCallTimeout.toMillis(), TimeUnit.MILLISECONDS);
+                int resultSize = estimateSize(result.structuredContent());
+                if (resultSize > maxToolResultBytes) {
+                    return failedOutcome(
+                            call,
+                            "MCP_TOOL_RESULT_TOO_LARGE",
+                            Map.of("error", "Result too large", "bytes", resultSize),
+                            "El resultado de la herramienta excedio el limite de tamano.");
+                }
+                MessageToolCallStatus status =
+                        result.isError()
+                                ? MessageToolCallStatus.FAILED
+                                : MessageToolCallStatus.COMPLETED;
+                Instant now = clock.instant();
+                conversations.updateToolCallResult(
+                        conversationId,
+                        ownerId,
+                        call.id(),
+                        status,
+                        result.isError(),
+                        result.structuredContent(),
+                        null,
+                        now);
+                String resultText =
+                        result.content().isEmpty()
+                                ? String.valueOf(result.structuredContent())
+                                : String.join("\n", result.content());
+                return new ToolExecutionOutcome(
+                        status, result.isError(), result.structuredContent(), null, resultText);
+            } catch (TimeoutException exception) {
+                future.cancel(true);
+                return failedOutcome(
+                        call,
+                        "MCP_TIMEOUT",
+                        Map.of("error", "Timed out"),
+                        "La herramienta no respondio a tiempo.");
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                return failedOutcome(
+                        call,
+                        "MCP_TOOL_INTERRUPTED",
+                        Map.of("error", "Interrupted"),
+                        "La ejecucion de la herramienta fue interrumpida.");
+            } catch (ExecutionException exception) {
+                String code =
+                        exception.getCause()
+                                        instanceof
+                                        com.aidatachat.application.exception
+                                                        .McpCommunicationException
+                                                mcpException
+                                ? mcpException.code()
+                                : "MCP_UNAVAILABLE";
+                return failedOutcome(
+                        call, code, Map.of("error", code), "La herramienta no esta disponible.");
+            }
+        }
+
+        private ToolExecutionOutcome blockedOutcome(
+                PreparedCall call, String code, String message) {
+            Instant now = clock.instant();
+            Map<String, Object> result = Map.of("error", message);
+            conversations.updateToolCallResult(
+                    conversationId,
+                    ownerId,
+                    call.id(),
+                    MessageToolCallStatus.BLOCKED,
+                    true,
+                    result,
+                    code,
+                    now);
+            return new ToolExecutionOutcome(
+                    MessageToolCallStatus.BLOCKED, true, result, code, message);
+        }
+
+        private ToolExecutionOutcome failedOutcome(
+                PreparedCall call, String code, Map<String, Object> result, String resultText) {
+            Instant now = clock.instant();
+            conversations.updateToolCallResult(
+                    conversationId,
+                    ownerId,
+                    call.id(),
+                    MessageToolCallStatus.FAILED,
+                    true,
+                    result,
+                    code,
+                    now);
+            return new ToolExecutionOutcome(
+                    MessageToolCallStatus.FAILED, true, result, code, resultText);
+        }
+
+        private int estimateSize(Map<String, Object> value) {
+            return String.valueOf(value).getBytes(StandardCharsets.UTF_8).length;
+        }
+
+        private ParsedArguments parseArguments(String json) {
+            if (json.isBlank()) {
+                return new ParsedArguments(Map.of(), true);
+            }
+            try {
+                return new ParsedArguments(JSON.readValue(json, ARGUMENTS_TYPE), true);
+            } catch (RuntimeException exception) {
+                return new ParsedArguments(Map.of(), false);
+            }
         }
 
         private synchronized void complete() {
@@ -647,7 +1032,69 @@ public final class ChatService implements ChatUseCase {
                     remoteAddress,
                     code == null ? Map.of() : Map.of("result_code", code));
         }
+
+        private final class RoundSubscriber implements Flow.Subscriber<LlmChunk> {
+
+            private final int token;
+
+            private RoundSubscriber(int token) {
+                this.token = token;
+            }
+
+            @Override
+            public void onSubscribe(Flow.Subscription subscription) {
+                handleSubscribe(token, subscription);
+            }
+
+            @Override
+            public void onNext(LlmChunk chunk) {
+                handleNext(token, chunk);
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+                handleError(token, throwable);
+            }
+
+            @Override
+            public void onComplete() {
+                handleComplete(token);
+            }
+        }
+
+        private final class ToolCallAccumulator {
+            private String providerToolCallId;
+            private String toolName;
+            private final StringBuilder arguments = new StringBuilder();
+
+            private void merge(LlmToolCallDelta delta) {
+                if (delta.providerToolCallId() != null) {
+                    providerToolCallId = delta.providerToolCallId();
+                }
+                if (delta.toolName() != null) {
+                    toolName = delta.toolName();
+                }
+                arguments.append(delta.argumentsJsonDelta());
+            }
+        }
     }
+
+    private record PreparedCall(
+            UUID id,
+            String providerToolCallId,
+            String toolName,
+            Map<String, Object> arguments,
+            boolean argumentsValid,
+            int sequence) {}
+
+    private record ParsedArguments(Map<String, Object> arguments, boolean valid) {}
+
+    private record ToolExecutionOutcome(
+            MessageToolCallStatus status,
+            boolean isError,
+            Map<String, Object> result,
+            String errorCode,
+            String resultText) {}
 
     private static final class GenerationPublisher implements Flow.Publisher<GenerationEvent> {
 

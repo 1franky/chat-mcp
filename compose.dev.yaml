@@ -2,6 +2,7 @@ services:
   chat-backend:
     environment:
       APP_INTEGRATIONS_MODE: fake
+      MCP_INTEGRATION_MODE: real
       MCP_BASE_URL: http://fake-mcp:8080
 
   fake-mcp:

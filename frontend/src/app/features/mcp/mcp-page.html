@@ -1,0 +1,73 @@
+<main class="mcp-shell">
+  <section class="heading" aria-labelledby="mcp-title">
+    <p class="eyebrow">CONFIGURACION</p>
+    <div>
+      <h1 id="mcp-title">Estado de MCP</h1>
+      <p>
+        Panel de solo lectura. El backend es el unico cliente MCP; el navegador nunca se conecta
+        directamente al servidor de datos.
+      </p>
+    </div>
+    <button mat-stroked-button type="button" (click)="reload()">Actualizar</button>
+  </section>
+
+  @if (error()) {
+    <p class="message message--error" role="alert">{{ error() }}</p>
+  }
+
+  @if (loading()) {
+    <div class="loading" aria-live="polite">
+      <mat-spinner diameter="32"></mat-spinner>
+      <span>Cargando estado…</span>
+    </div>
+  } @else if (status(); as status) {
+    <mat-card appearance="outlined" class="status-card">
+      <mat-card-header>
+        <mat-card-title>
+          <span class="state" [attr.data-state]="status.state">{{ status.state }}</span>
+          Data Platform MCP
+        </mat-card-title>
+        <mat-card-subtitle>{{ status.detail }}</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <dl class="status-grid">
+          <div>
+            <dt>Version del servidor</dt>
+            <dd>{{ status.serverVersion }}</dd>
+          </div>
+          <div>
+            <dt>Protocolo negociado</dt>
+            <dd>{{ status.protocolVersion }}</dd>
+          </div>
+          <div>
+            <dt>Contrato negociado</dt>
+            <dd>{{ status.contractVersion }}</dd>
+          </div>
+          <div>
+            <dt>Origen</dt>
+            <dd>{{ status.fake ? 'Doble fake' : 'MCP real' }}</dd>
+          </div>
+        </dl>
+      </mat-card-content>
+    </mat-card>
+
+    <section class="tools-panel" aria-labelledby="tools-title">
+      <h2 id="tools-title">Funciones disponibles</h2>
+      <div class="tool-list">
+        @for (tool of tools(); track tool.name) {
+          <article class="tool-item">
+            <div>
+              <strong>{{ tool.name }}</strong>
+              <span>{{ tool.description }}</span>
+            </div>
+            <span class="readonly" [attr.data-value]="tool.readOnly">
+              {{ tool.readOnly ? 'Solo lectura' : 'Puede modificar datos' }}
+            </span>
+          </article>
+        } @empty {
+          <div class="empty">No hay funciones disponibles todavia.</div>
+        }
+      </div>
+    </section>
+  }
+</main>

@@ -126,6 +126,36 @@
               </div>
               <div class="message__body">
                 @if (message.role === 'ASSISTANT') {
+                  @if (message.toolCalls.length) {
+                    <div class="tool-call-list" aria-label="Llamadas a herramientas MCP">
+                      @for (toolCall of message.toolCalls; track toolCall.id) {
+                        <div
+                          class="tool-call-card"
+                          [attr.data-state]="toolCall.status"
+                          [attr.data-error]="toolCall.isError"
+                        >
+                          <div class="tool-call-card__header">
+                            <strong>{{ toolCall.toolName }}</strong>
+                            <span class="tool-call-badge" [attr.data-state]="toolCall.status">
+                              {{ toolCallStatusLabel(toolCall.status) }}
+                            </span>
+                          </div>
+                          <dl class="tool-call-card__detail">
+                            <div>
+                              <dt>Argumentos</dt>
+                              <dd>{{ toolCallPreview(toolCall.arguments) }}</dd>
+                            </div>
+                            @if (toolCall.result !== null) {
+                              <div>
+                                <dt>Resultado</dt>
+                                <dd>{{ toolCallPreview(toolCall.result) }}</dd>
+                              </div>
+                            }
+                          </dl>
+                        </div>
+                      }
+                    </div>
+                  }
                   <div class="markdown" [innerHTML]="markdown(message.content)"></div>
                   @if (message.status === 'STREAMING') {
                     <span class="stream-cursor" aria-label="Generando"></span>
@@ -197,10 +227,9 @@
             </span>
           }
         </div>
-        <span class="mcp-state" [attr.data-state]="mcp()?.state ?? 'DOWN'">
-          MCP {{ integrationMode().toUpperCase() }} {{ mcp()?.state ?? 'SIN DATOS' }} · integracion
-          real en Sprint 4
-        </span>
+        <a class="mcp-state" [attr.data-state]="mcp()?.state ?? 'DOWN'" routerLink="/settings/mcp">
+          MCP {{ integrationMode().toUpperCase() }} {{ mcp()?.state ?? 'SIN DATOS' }} · ver estado
+        </a>
       </div>
 
       <div class="composer-box">

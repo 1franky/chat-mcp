@@ -276,15 +276,17 @@ function chatMessage(
     regeneratedFromMessageId: null,
     createdAt: '2026-07-15T00:00:00Z',
     updatedAt: '2026-07-15T00:00:00Z',
+    toolCalls: [],
   };
 }
 
 function generationEvent(
-  type: 'generation' | 'delta' | 'complete',
+  type: 'generation' | 'delta' | 'complete' | 'tool_call' | 'tool_result',
   generationId: string,
   userMessage: ReturnType<typeof chatMessage> | null,
   assistantMessage: ReturnType<typeof chatMessage> | null,
   delta: string | null = null,
+  toolCall: Record<string, unknown> | null = null,
 ) {
   return {
     type,
@@ -294,5 +296,6 @@ function generationEvent(
     delta,
     errorCode: null,
     retryable: false,
+    toolCall,
   };
 }

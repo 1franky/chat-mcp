@@ -268,6 +268,74 @@ select {
   white-space: pre-wrap;
 }
 
+.tool-call-list {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+}
+
+.tool-call-card {
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+  background: var(--surface-raised);
+  font-size: 0.8rem;
+}
+
+.tool-call-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tool-call-badge {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--badge-neutral);
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+  font-weight: 750;
+}
+
+.tool-call-badge[data-state='COMPLETED'] {
+  background: var(--success-surface);
+  color: var(--success-text);
+}
+
+.tool-call-badge[data-state='RUNNING'],
+.tool-call-badge[data-state='PENDING'] {
+  background: var(--warning-surface);
+  color: var(--warning-text);
+}
+
+.tool-call-badge[data-state='FAILED'],
+.tool-call-badge[data-state='BLOCKED'],
+.tool-call-badge[data-state='TIMEOUT'] {
+  background: var(--danger-surface);
+  color: var(--danger-text);
+}
+
+.tool-call-card__detail {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.5rem 0 0;
+}
+
+.tool-call-card__detail dt {
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tool-call-card__detail dd {
+  margin: 0.1rem 0 0;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 .markdown {
   line-height: 1.65;
   overflow-wrap: anywhere;
@@ -338,11 +406,24 @@ select {
   font-weight: 750;
 }
 
+.mcp-state {
+  text-decoration: none;
+}
+
+.mcp-state:hover {
+  text-decoration: underline;
+}
+
 .message-status[data-status='COMPLETED'],
 .capability[data-value='SUPPORTED'],
 .mcp-state[data-state='UP'] {
   background: var(--success-surface);
   color: var(--success-text);
+}
+
+.mcp-state[data-state='DEGRADED'] {
+  background: var(--warning-surface);
+  color: var(--warning-text);
 }
 
 .message-status[data-status='FAILED'],
