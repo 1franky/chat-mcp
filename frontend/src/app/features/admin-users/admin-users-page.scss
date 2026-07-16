@@ -21,12 +21,12 @@
 }
 
 .heading p:not(.eyebrow) {
-  color: #4a6170;
+  color: var(--text-secondary);
   line-height: 1.6;
 }
 
 .eyebrow {
-  color: #087482;
+  color: var(--brand-muted);
   font-size: 0.76rem;
   font-weight: 750;
   letter-spacing: 0.14em;
@@ -41,8 +41,8 @@
 
 mat-card,
 .users-panel {
-  border: 1px solid rgba(21, 54, 74, 0.14);
-  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-raised);
 }
 
 .create-card {
@@ -76,13 +76,13 @@ table {
 th,
 td {
   padding: 1rem;
-  border-bottom: 1px solid rgba(21, 54, 74, 0.09);
+  border-bottom: 1px solid var(--border-subtle);
   text-align: left;
   vertical-align: middle;
 }
 
 th {
-  color: #607481;
+  color: var(--text-secondary);
   font-size: 0.76rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -91,7 +91,7 @@ th {
 td:first-child span {
   display: block;
   margin-top: 0.25rem;
-  color: #607481;
+  color: var(--text-secondary);
   font-size: 0.84rem;
 }
 
@@ -99,8 +99,8 @@ td:first-child span {
   display: inline-flex;
   padding: 0.25rem 0.55rem;
   border-radius: 999px;
-  background: #e1edf9;
-  color: #245477;
+  background: var(--info-surface);
+  color: var(--info-text);
   font-size: 0.72rem;
   font-weight: 750;
 }
@@ -111,7 +111,7 @@ td:first-child span {
 }
 
 .danger {
-  color: #a23832;
+  color: var(--danger-text);
 }
 
 .pagination,
@@ -121,7 +121,7 @@ td:first-child span {
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  color: #4a6170;
+  color: var(--text-secondary);
 }
 
 .loading {
@@ -132,8 +132,8 @@ td:first-child span {
   margin-bottom: 1rem;
   padding: 0.85rem 1rem;
   border-radius: 0.65rem;
-  background: #ffe8e6;
-  color: #7c2521;
+  background: var(--danger-surface);
+  color: var(--danger-text);
 }
 
 .visually-hidden {

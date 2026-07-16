@@ -54,16 +54,16 @@ mat-card-content {
   display: inline-flex;
   padding: 0.3rem 0.65rem;
   border-radius: 999px;
-  background: #d9f4e8;
-  color: #095b3e;
+  background: var(--success-surface);
+  color: var(--success-text);
   font-size: 0.72rem;
   font-weight: 750;
   letter-spacing: 0.07em;
 }
 
 .fake {
-  background: #e1edf9;
-  color: #245477;
+  background: var(--info-surface);
+  color: var(--info-text);
 }
 
 @media (max-width: 820px) {
