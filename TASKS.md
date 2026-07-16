@@ -85,3 +85,10 @@ Actualizado: 2026-07-16.
 - [ ] Sprint 5+ — RAG y demas roadmap definido en la especificacion.
 
 No se debe iniciar ninguna tarea fuera del Sprint 4 sin aprobacion del propietario.
+
+## Bugs pendientes (frontend, reportados 2026-07-16)
+
+- [ ] El boton de tema claro/oscuro solo cambia el icono; los colores de la UI se quedan siempre en modo claro (revisar `frontend/src/styles.scss` y el toggle de tema en `frontend/src/app/core/theme`).
+- [ ] Falta un boton para eliminar conversaciones directamente desde la barra lateral de chats (hoy hay que entrar a cada chat para borrarlo).
+- [ ] Al seleccionar un chat desde la barra lateral, esta se contrae sola; deberia quedarse abierta tras la seleccion.
+- [ ] En movil, la barra lateral de chats no se contrae (no funciona como overlay/drawer) y el boton de "nuevo chat" no se ve.
