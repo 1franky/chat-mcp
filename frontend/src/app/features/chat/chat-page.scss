@@ -6,6 +6,7 @@
 }
 
 .chat-shell {
+  position: relative;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   height: 100%;
@@ -77,10 +78,17 @@ select {
   padding: 0 0.65rem 1rem;
 }
 
+.conversation-row {
+  display: flex;
+  gap: 0.35rem;
+  align-items: stretch;
+}
+
 .conversation-item {
   display: grid;
+  flex: 1;
+  min-width: 0;
   gap: 0.25rem;
-  width: 100%;
   padding: 0.8rem;
   border: 1px solid transparent;
   border-radius: 0.75rem;
@@ -94,6 +102,27 @@ select {
 .conversation-item--active {
   border-color: var(--border-subtle);
   background: var(--surface-selected);
+}
+
+.conversation-delete {
+  flex-shrink: 0;
+  width: 2.1rem;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.conversation-delete:hover {
+  border-color: var(--danger-border);
+  background: var(--danger-surface);
+  color: var(--danger-text);
+}
+
+.conversation-row--active .conversation-delete {
+  color: var(--text-primary);
 }
 
 .conversation-item strong {

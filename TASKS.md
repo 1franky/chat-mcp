@@ -86,9 +86,15 @@ Actualizado: 2026-07-16.
 
 No se debe iniciar ninguna tarea fuera del Sprint 4 sin aprobacion del propietario.
 
-## Bugs pendientes (frontend, reportados 2026-07-16)
+## Bugs corregidos (frontend, reportados 2026-07-16, cerrados 2026-07-16)
 
-- [ ] El boton de tema claro/oscuro solo cambia el icono; los colores de la UI se quedan siempre en modo claro (revisar `frontend/src/styles.scss` y el toggle de tema en `frontend/src/app/core/theme`).
-- [ ] Falta un boton para eliminar conversaciones directamente desde la barra lateral de chats (hoy hay que entrar a cada chat para borrarlo).
-- [ ] Al seleccionar un chat desde la barra lateral, esta se contrae sola; deberia quedarse abierta tras la seleccion.
-- [ ] En movil, la barra lateral de chats no se contrae (no funciona como overlay/drawer) y el boton de "nuevo chat" no se ve.
+- [x] El boton de tema claro/oscuro solo cambiaba el icono; los colores de la UI se quedaban siempre en modo claro. Causa: `angular.json` cargaba el prebuilt theme estatico `azure-blue.css`, ajeno al `data-theme` de la app. Se reemplazo por `mat.theme()` (Material 3) con `theme-type: color-scheme`, que usa `light-dark()` y reacciona al `color-scheme` que la app ya alterna en `src/styles.scss`.
+- [x] Faltaba un boton para eliminar conversaciones directamente desde la barra lateral. Se agrego un boton `✕`/`✓` (confirmacion en dos pasos) por fila en `frontend/src/app/features/chat/chat-page.html`, separado del boton de seleccion para no anidar `<button>`.
+- [x] Al seleccionar un chat desde la barra lateral esta se contraia sola en escritorio. `openConversation()`/`newConversation()` ahora solo colapsan la barra cuando el viewport es movil (`matchMedia('(max-width: 860px)')`).
+- [x] En movil la barra lateral no se contraia como overlay y el boton de "nuevo chat" no se veia. Causa: `.chat-shell` no tenia `position: relative`, asi que el `position: absolute` del drawer movil se anclaba al documento completo y quedaba tapado por la topbar `sticky`. Se agrego `position: relative` a `.chat-shell` y el estado inicial de `sidebarCollapsed` ahora depende del viewport.
+
+Verificado en navegador real (Chromium vía Playwright) contra un stack Docker Compose aislado y desechable (proveedor FAKE, dos conversaciones, viewport de escritorio y movil 390×844): los 4 comportamientos quedaron confirmados visualmente, no solo por tipos/tests. Pruebas unitarias nuevas en `chat-page.spec.ts` cubren que el sidebar no se colapsa en escritorio al seleccionar otra conversacion y el flujo de borrado con confirmacion desde la fila.
+
+### Hallazgo colateral (no corregido, fuera de alcance de este cierre)
+
+- [ ] Recargar una ruta anidada (p. ej. `/chat/<id>`, `/settings/providers`) rompe la carga de assets: la CSP del backend define `base-uri 'none'`, que bloquea el `<base href="/">` de `index.html`; el navegador recalcula las URLs relativas de los chunks JS/CSS contra el path actual y devuelve 404 (fallback SPA en HTML). Revisar la politica CSP en el backend o servir `<base>` de otro modo antes de depender de recargas profundas.
