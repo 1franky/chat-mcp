@@ -37,6 +37,8 @@ html {
   --warning-surface: #fff2d9;
   --warning-border: #e0bd76;
   --warning-text: #8a5a05;
+  --info-surface: #e1edf9;
+  --info-text: #245477;
   --shadow-soft: rgba(32, 58, 72, 0.12);
   color-scheme: light;
   background:
@@ -78,6 +80,8 @@ html[data-theme='dark'] {
   --warning-surface: #3d2f14;
   --warning-border: #74572a;
   --warning-text: #f0c674;
+  --info-surface: #1c3145;
+  --info-text: #9cc4ec;
   --shadow-soft: rgba(0, 0, 0, 0.35);
   color-scheme: dark;
   background:
@@ -93,20 +97,8 @@ body {
   background: transparent;
 }
 
-html[data-theme='dark'] :where(mat-card, .form-card, .models-panel, .capabilities) {
-  border-color: var(--border-subtle) !important;
-  background: var(--surface-raised) !important;
-  color: var(--text-primary) !important;
-}
-
-html[data-theme='dark'] :where(.connection-item, .user-item, .auth-card) {
-  border-color: var(--border-subtle) !important;
-  background: var(--surface-raised) !important;
-  color: var(--text-primary) !important;
-}
-
-html[data-theme='dark'] :where(.heading p, .hero p, mat-card-content p) {
-  color: var(--text-secondary) !important;
+mat-card-content p {
+  color: var(--text-secondary);
 }
 
 button,
