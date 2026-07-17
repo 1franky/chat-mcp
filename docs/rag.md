@@ -32,6 +32,10 @@ requiere una migración nueva que versione la columna o la tabla; Postgres ya re
 tipo cualquier inserción con una dimensión distinta, que es la protección mínima contra mezclar
 vectores de modelos distintos que exige la especificación.
 
+Verificado el 2026-07-17 contra Postgres real (pgvector) vía Testcontainers en
+`PostgresMigrationTest`: V6/V7 aplican limpio, la columna `embedding` queda en dimensión 1536, el
+índice HNSW existe y `owner_id` es obligatorio en `document`/`document_chunk`.
+
 ### `EmbeddingProviderPort`
 
 ```java
