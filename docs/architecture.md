@@ -65,8 +65,9 @@ flowchart LR
 
 Flyway crea la extension `vector`, namespaces delimitados, identidad, sesiones, auditoria,
 proveedores y `chat.conversation`/`chat.message`. El schema `rag` tiene tablas (`document`,
-`document_chunk`, `message_document`) desde `V7`, pero sin adaptador real que las use todavia — ver
-`docs/rag.md`. JPA usa
+`document_chunk`, `message_document`) desde `V7`; `document` y la columna `embedding` de
+`document_chunk` ya tienen adaptadores reales (`DocumentJpaAdapter`, `PgVectorSearchAdapter`) y fake,
+pero sin ningun caso de uso ni endpoint que los invoque todavia — ver `docs/rag.md`. JPA usa
 `ddl-auto=validate`; Flyway es la unica autoridad de esquema. Un indice parcial impide dos mensajes
 de asistente `STREAMING` para la misma conversacion y un lock pesimista asigna posiciones estables.
 

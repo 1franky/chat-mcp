@@ -89,6 +89,9 @@ app:
         window: ${REGISTRATION_RATE_LIMIT_WINDOW:1h}
   integrations:
     mode: ${APP_INTEGRATIONS_MODE:fake}
+  rag:
+    storage:
+      path: ${RAG_STORAGE_PATH:/var/lib/ai-data-chat/documents}
   providers:
     credential-master-key: ${CREDENTIAL_MASTER_KEY:}
     credential-key-version: ${CREDENTIAL_KEY_VERSION:1}

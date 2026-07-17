@@ -13,9 +13,11 @@ deterministic test doubles for LLM/MCP integrations. The full spec lives in
 connections, persistent chat with streaming/cancellation, a real MCP Streamable HTTP client, and
 backend-orchestrated tool calling for OpenAI and Anthropic only. **Sprint 5 (RAG) work beyond what
 the project owner has explicitly approved must not be started** — see `TASKS.md` for exactly which
-Sprint 5 pieces are approved and landed so far (as of 2026-07-17: the `rag` Flyway schema and
-`EmbeddingProviderPort` with its fake adapter only; upload, extraction, chunking, retrieval,
-citations and the `/knowledge` UI are still unapproved).
+Sprint 5 pieces are approved and landed so far (as of 2026-07-17: the `rag` Flyway schema,
+`EmbeddingProviderPort`, and real+fake adapters for `DocumentRepository`/`DocumentStoragePort`/
+`VectorSearchPort` — persistence/storage/vector-search only, no use case or endpoint wired to them
+yet; upload, extraction, chunking, retrieval, citations and the `/knowledge` UI are still
+unapproved).
 
 ## Commands
 
@@ -92,9 +94,11 @@ configuration → wires application.service to concrete adapters
   and are swapped in by `configuration`.
 - Flyway is the sole schema authority (`ddl-auto=validate`); migrations live in
   `backend/src/main/resources/db/migration`. Schemas: `identity`, `audit`, provider tables, and
-  `chat.conversation`/`chat.message`. The `rag` schema now has `document`, `document_chunk`
-  (`vector(1536)` + HNSW index) and `message_document` (`V7`), but no adapter writes to it yet — see
-  `docs/rag.md` for exactly what is and isn't approved.
+  `chat.conversation`/`chat.message`. The `rag` schema has `document`, `document_chunk`
+  (`vector(1536)` + HNSW index) and `message_document` (`V7`); `document` and the `embedding` column
+  of `document_chunk` are reachable via `DocumentRepository`/`VectorSearchPort` real+fake adapters,
+  but no use case or endpoint wires them to anything yet — see `docs/rag.md` for exactly what is and
+  isn't approved.
 - Adding or changing an integration (LLM provider, MCP transport, etc.) means adding an adapter
   behind the existing port — never reaching into `application`/`domain` from adapter code, and
   never adding a new external dependency directly into `application` or `domain`.

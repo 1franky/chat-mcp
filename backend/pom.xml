@@ -22,6 +22,7 @@
     <bouncycastle.version>1.84</bouncycastle.version>
     <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
     <maven-enforcer-plugin.version>3.6.2</maven-enforcer-plugin.version>
+    <pgvector.version>0.1.6</pgvector.version>
     <spotless-maven-plugin.version>2.46.1</spotless-maven-plugin.version>
   </properties>
 
@@ -38,6 +39,11 @@
   </dependencyManagement>
 
   <dependencies>
+    <dependency>
+      <groupId>com.pgvector</groupId>
+      <artifactId>pgvector</artifactId>
+      <version>${pgvector.version}</version>
+    </dependency>
     <dependency>
       <groupId>com.tngtech.archunit</groupId>
       <artifactId>archunit-junit5</artifactId>
