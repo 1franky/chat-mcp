@@ -4,6 +4,10 @@ Todos los cambios relevantes del proyecto se documentan aquí. El formato sigue 
 
 ## [Unreleased]
 
+### Added — Proveedor MiniMax (2026-07-17)
+
+- Nuevo tipo de proveedor `MINIMAX`: host fijo `https://api.minimax.io/v1`, autenticación bearer y Chat Completions compatible con OpenAI (streaming SSE incluido), siguiendo el mismo patrón que BytePlus. No publica catálogo de modelos, así que el model ID se configura manualmente como `CONFIGURED`.
+
 ### Added — Sprint 3
 
 - Conversaciones y mensajes aislados por propietario con CRUD, busqueda, regeneracion y snapshots de proveedor/modelo.

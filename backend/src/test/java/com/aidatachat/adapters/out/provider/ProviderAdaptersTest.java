@@ -132,6 +132,36 @@ class ProviderAdaptersTest {
     }
 
     @Test
+    void miniMaxUsesFixedBaseUrlAndBoundedProbe() {
+        server.createContext(
+                "/minimax/chat/completions",
+                exchange -> {
+                    String body =
+                            new String(
+                                    exchange.getRequestBody().readAllBytes(),
+                                    StandardCharsets.UTF_8);
+                    boolean valid =
+                            "Bearer minimax-test-key"
+                                            .equals(
+                                                    exchange.getRequestHeaders()
+                                                            .getFirst("Authorization"))
+                                    && body.contains("\"max_tokens\":1")
+                                    && body.contains("\"model\":\"MiniMax-M2\"");
+                    send(exchange, valid ? 200 : 400, valid ? "{\"choices\":[]}" : "{}");
+                });
+        MiniMaxProviderAdapter adapter = new MiniMaxProviderAdapter(http, baseUrl + "/minimax");
+        ProviderClientConfiguration configuration =
+                new ProviderClientConfiguration(null, null, null, null, null, "MiniMax-M2");
+
+        assertThat(
+                        adapter.testConnection(configuration, "minimax-test-key".toCharArray())
+                                .success())
+                .isTrue();
+        assertThat(adapter.discoverModels(configuration, "minimax-test-key".toCharArray()))
+                .isEmpty();
+    }
+
+    @Test
     void compatibleAndOllamaAdaptersUseOnlyAllowlistedDestinations() {
         server.createContext(
                 "/compatible/models",
@@ -287,6 +317,9 @@ class ProviderAdaptersTest {
                 "/byteplus/chat/completions",
                 exchange -> sendStream(exchange, "text/event-stream", chatCompletionStream));
         server.createContext(
+                "/minimax/chat/completions",
+                exchange -> sendStream(exchange, "text/event-stream", chatCompletionStream));
+        server.createContext(
                 "/compatible/chat/completions",
                 exchange -> sendStream(exchange, "text/event-stream", chatCompletionStream));
         server.createContext(
@@ -302,6 +335,7 @@ class ProviderAdaptersTest {
         LlmChatRequest request = request("model-test");
         ProviderDestinationPolicy policy = new ProviderDestinationPolicy("127.0.0.1", "127.0.0.1");
         ChunkSubscriber bytePlus = new ChunkSubscriber();
+        ChunkSubscriber miniMax = new ChunkSubscriber();
         ChunkSubscriber compatible = new ChunkSubscriber();
         ChunkSubscriber ollama = new ChunkSubscriber();
 
@@ -312,6 +346,12 @@ class ProviderAdaptersTest {
                         "key".toCharArray(),
                         request)
                 .subscribe(bytePlus);
+        new MiniMaxProviderAdapter(http, baseUrl + "/minimax")
+                .streamChat(
+                        new ProviderClientConfiguration(null, null, null, null, null, "model-test"),
+                        "key".toCharArray(),
+                        request)
+                .subscribe(miniMax);
         new OpenAiCompatibleProviderAdapter(http, policy)
                 .streamChat(
                         new ProviderClientConfiguration(
@@ -333,9 +373,11 @@ class ProviderAdaptersTest {
                 .subscribe(ollama);
 
         assertThat(bytePlus.finished.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(miniMax.finished.await(2, TimeUnit.SECONDS)).isTrue();
         assertThat(compatible.finished.await(2, TimeUnit.SECONDS)).isTrue();
         assertThat(ollama.finished.await(2, TimeUnit.SECONDS)).isTrue();
         assertThat(bytePlus.content()).isEqualTo("Dato");
+        assertThat(miniMax.content()).isEqualTo("Dato");
         assertThat(compatible.content()).isEqualTo("Dato");
         assertThat(ollama.content()).isEqualTo("Local");
         assertThat(ollama.chunks.getLast().inputTokens()).isEqualTo(5);

@@ -65,8 +65,9 @@ docker compose -f compose.yaml -f compose.dev.yaml up --build --wait
 
 Este overlay activa `MCP_INTEGRATION_MODE=real` mientras conserva `APP_INTEGRATIONS_MODE=fake`, así
 el proveedor LLM `FAKE` gratuito sigue disponible; ambos flags son independientes. Para LLM, la UI
-permite configurar el fake determinista o conexiones OpenAI, Anthropic, BytePlus, OpenAI-compatible
-y Ollama. Ninguna prueba automatizada consume APIs pagadas ni el MCP real de Data Platform; probar
+permite configurar el fake determinista o conexiones OpenAI, Anthropic, BytePlus, MiniMax,
+OpenAI-compatible y Ollama. Ninguna prueba automatizada consume APIs pagadas ni el MCP real de
+Data Platform; probar
 una conexion real sólo ocurre por accion explícita del usuario.
 
 ## Chat y streaming
@@ -76,7 +77,7 @@ autenticado. La UI permite crear, buscar, renombrar y eliminar conversaciones, c
 para mensajes futuros, regenerar, copiar y detener una respuesta. Los mensajes anteriores conservan
 el snapshot de proveedor/modelo, uso, `finishReason` y request ID que corresponda.
 
-El backend normaliza streaming de OpenAI Responses, Anthropic Messages, BytePlus/OpenAI Chat
+El backend normaliza streaming de OpenAI Responses, Anthropic Messages, BytePlus/MiniMax/OpenAI Chat
 Completions, proveedores compatibles y Ollama. Para una prueba local sin coste configura el proveedor
 `FAKE`, sincroniza `fake-chat-v1` y selecciónalo como predeterminado. La respuesta llega por SSE y el
 mensaje parcial se persiste como `CANCELLED` si el usuario detiene la generación o el navegador se
@@ -105,6 +106,8 @@ PROVIDER_ALLOWED_HTTP_HOSTS=ollama
 
 Con allowlist vacía se bloquean todos los destinos configurables. BytePlus admite actualmente la
 region oficial documentada `ap-southeast-1` y requiere un model ID o endpoint ID configurado.
+MiniMax usa el host fijo `api.minimax.io` (sin allowlist, igual que OpenAI/Anthropic) y también
+requiere un model ID configurado, ya que no publica un catálogo de modelos.
 
 Para detener el entorno sin borrar datos:
 

@@ -120,6 +120,13 @@
                 </mat-form-field>
               }
 
+              @if (form.controls.providerType.value === 'MINIMAX') {
+                <mat-form-field appearance="outline">
+                  <mat-label>Model ID</mat-label>
+                  <input matInput formControlName="configuredModelId" autocomplete="off" />
+                </mat-form-field>
+              }
+
               @if (form.controls.providerType.value === 'OPENAI_COMPATIBLE') {
                 <mat-form-field appearance="outline">
                   <mat-label>Ruta de modelos</mat-label>

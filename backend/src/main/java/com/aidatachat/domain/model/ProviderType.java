@@ -4,6 +4,7 @@ public enum ProviderType {
     OPENAI,
     ANTHROPIC,
     BYTEPLUS,
+    MINIMAX,
     OPENAI_COMPATIBLE,
     OLLAMA,
     FAKE;

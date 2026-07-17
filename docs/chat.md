@@ -53,6 +53,7 @@ Cada delta actualiza el contenido parcial antes de emitirse al navegador. Al com
 - OpenAI: Responses API SSE, con tool calling (`function_call`).
 - Anthropic: Messages API SSE, con tool calling (`tool_use`).
 - BytePlus: Chat Completions compatible SSE. Sin tool calling.
+- MiniMax: Chat Completions compatible SSE. Sin tool calling.
 - OpenAI-compatible: Responses o Chat Completions según rutas configuradas. Sin tool calling.
 - Ollama: `/api/chat` NDJSON. Sin tool calling.
 - Fake: publisher determinista en proceso, sin red ni coste. Sin tool calling.

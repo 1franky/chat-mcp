@@ -101,3 +101,10 @@ Verificado en navegador real (Chromium vía Playwright) contra un stack Docker C
 - [x] Hallazgo colateral relacionado, corregido en la misma pasada: recargar una ruta anidada (`/chat/<id>`, `/settings/providers`, etc.) rompia la carga de assets porque la CSP definia `base-uri 'none'`, bloqueando el `<base href="/">` de `index.html`. Se cambio a `base-uri 'self'` en `deployment/nginx/default.conf.template` (sigue bloqueando `<base>` apuntando a otro origen, que es el vector real de riesgo).
 
 Verificado en navegador real contra el mismo tipo de stack Docker Compose aislado y desechable: home, proveedores (lista + conexion seleccionada + capacidades), MCP, login/registro y chat confirmados visualmente en oscuro completo (fondo casi negro, tarjetas oscuras, badges con la paleta correcta). `npm run format:check`, `lint`, `test:ci` (24/24) y `build` en verde.
+
+## Proveedor añadido (2026-07-17): MiniMax
+
+- [x] Nuevo `ProviderType.MINIMAX` con `MiniMaxProviderAdapter`: host fijo `https://api.minimax.io/v1` (verificado en la documentacion oficial), autenticacion bearer y Chat Completions compatible con OpenAI, incluido streaming SSE (`ProviderStreamingSupport.parseChatCompletions`, ya compartido con BytePlus). Sigue el mismo patron que BytePlus: no publica catalogo de modelos, asi que exige un model ID configurado (`CONFIGURED`) y una prueba de conexion acotada a un token de salida.
+- [x] Wiring backend: bean en `ApplicationBeansConfiguration`, validacion de `configuredModelId` requerido en `ProviderManagementService`, pruebas de contrato (conexion, catalogo vacio y streaming) en `ProviderAdaptersTest` contra un servidor HTTP local — sin llamadas pagadas.
+- [x] Frontend: tipo `MINIMAX` en `provider.models.ts`, tile en el selector de `providers-page.ts`/`.html` con el campo Model ID (sin base URL configurable, host fijo), copy actualizado en `home-page.html`.
+- [x] Documentacion actualizada: `docs/providers.md`, `docs/chat.md`, `README.md`, `CHANGELOG.md`.
