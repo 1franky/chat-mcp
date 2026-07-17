@@ -1,5 +1,6 @@
 package com.aidatachat.configuration;
 
+import com.aidatachat.adapters.out.fake.FakeEmbeddingProviderAdapter;
 import com.aidatachat.adapters.out.fake.FakeLlmProviderAdapter;
 import com.aidatachat.adapters.out.fake.FakeMcpGateway;
 import com.aidatachat.adapters.out.mcp.McpAuthProvider;
@@ -71,6 +72,15 @@ public class ApplicationBeansConfiguration {
     @ConditionalOnProperty(name = "app.mcp.mode", havingValue = "fake", matchIfMissing = true)
     FakeMcpGateway fakeMcpGateway() {
         return new FakeMcpGateway();
+    }
+
+    @Bean
+    @ConditionalOnProperty(
+            name = "app.integrations.mode",
+            havingValue = "fake",
+            matchIfMissing = true)
+    FakeEmbeddingProviderAdapter fakeEmbeddingProviderAdapter() {
+        return new FakeEmbeddingProviderAdapter();
     }
 
     @Bean

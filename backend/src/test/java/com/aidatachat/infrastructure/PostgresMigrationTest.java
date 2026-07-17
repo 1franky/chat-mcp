@@ -77,6 +77,15 @@ class PostgresMigrationTest {
                                 + "AND table_name = 'message_tool_call' "
                                 + "ORDER BY table_name",
                         String.class);
+        List<String> sprintFiveTables =
+                jdbcTemplate.queryForList(
+                        "SELECT table_schema || '.' || table_name "
+                                + "FROM information_schema.tables "
+                                + "WHERE table_schema = 'rag' "
+                                + "AND table_name IN ('document', 'document_chunk', "
+                                + "'message_document') "
+                                + "ORDER BY table_name",
+                        String.class);
 
         assertThat(vectorExtensions).isOne();
         assertThat(schemas).containsExactly("audit", "chat", "identity", "rag");
@@ -90,5 +99,37 @@ class PostgresMigrationTest {
                 .containsExactly("chat.provider_connection", "chat.provider_model");
         assertThat(sprintThreeTables).containsExactly("chat.conversation", "chat.message");
         assertThat(sprintFourTables).containsExactly("chat.message_tool_call");
+        assertThat(sprintFiveTables)
+                .containsExactly("rag.document", "rag.document_chunk", "rag.message_document");
+    }
+
+    @Test
+    void ragSchemaEnforcesEmbeddingDimensionAndOwnershipInvariants() {
+        Integer embeddingColumnDimension =
+                jdbcTemplate.queryForObject(
+                        "SELECT atttypmod FROM pg_attribute "
+                                + "JOIN pg_class ON pg_class.oid = pg_attribute.attrelid "
+                                + "JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace "
+                                + "WHERE pg_namespace.nspname = 'rag' "
+                                + "AND pg_class.relname = 'document_chunk' "
+                                + "AND pg_attribute.attname = 'embedding'",
+                        Integer.class);
+        Integer hnswIndexes =
+                jdbcTemplate.queryForObject(
+                        "SELECT count(*) FROM pg_indexes "
+                                + "WHERE schemaname = 'rag' AND tablename = 'document_chunk' "
+                                + "AND indexdef ILIKE '%USING hnsw%'",
+                        Integer.class);
+        List<String> ownerColumns =
+                jdbcTemplate.queryForList(
+                        "SELECT table_name FROM information_schema.columns "
+                                + "WHERE table_schema = 'rag' AND column_name = 'owner_id' "
+                                + "AND is_nullable = 'NO' "
+                                + "ORDER BY table_name",
+                        String.class);
+
+        assertThat(embeddingColumnDimension).isEqualTo(1536);
+        assertThat(hnswIndexes).isOne();
+        assertThat(ownerColumns).containsExactly("document", "document_chunk");
     }
 }
