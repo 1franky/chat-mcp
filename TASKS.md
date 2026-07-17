@@ -80,11 +80,17 @@ Actualizado: 2026-07-16.
 - [x] Anadir pruebas de contrato/seguridad (WireMock, JDK HttpServer, Testcontainers) y E2E Playwright sin llamadas pagadas ni al MCP real.
 - [x] Documentar la decision en ADR-0009 y actualizar `docs/mcp-integration.md`, `docs/architecture.md`, `docs/security.md`, `README.md` y `CLAUDE.md`.
 
-## Fuera del Sprint 4
+## Sprint 5 — RAG (iniciado 2026-07-17 con aprobacion explicita del propietario)
 
-- [ ] Sprint 5+ — RAG y demas roadmap definido en la especificacion.
+- [x] Migracion `V6` que corrige las restricciones `CHECK` de `chat.provider_connection`/`chat.message` para incluir `MINIMAX` (bug detectado al arrancar este sprint, ver seccion de MiniMax mas arriba).
+- [x] Migracion `V7` con el esquema `rag`: `rag.document` (ownership, hash unico por propietario, estado de procesamiento, dimension/modelo de embedding obligatorios solo en `READY`), `rag.document_chunk` (`owner_id` denormalizado, `embedding vector(1536)` con indice HNSW coseno, texto acotado, pagina/seccion para citas) y `rag.message_document` (relacion `SELECTED`/`CITED` con indices unicos parciales).
+- [x] `EmbeddingProviderPort` con `EmbeddingBatch` (dimension + vectores, valida longitud) y `FakeEmbeddingProviderAdapter` determinista (modelo `fake-embedding-v1`, vector unitario por hash SHA-256, sin red), wireado tras `app.integrations.mode=fake` igual que el resto de fakes.
+- [x] Pruebas: `FakeEmbeddingProviderAdapterTest` (determinismo, dimension, rechazo de modelo desconocido y de longitud invalida); `PostgresMigrationTest` ampliado para verificar las tablas `rag.*`, la dimension del vector (`atttypmod = 1536`), el indice HNSW y las columnas `owner_id` obligatorias. Pendiente de ejecutar contra Postgres real (Docker no disponible en el entorno donde se implemento; correr en CI o localmente antes de dar el schema por verificado end-to-end).
+- [ ] `DocumentStoragePort`/`VectorSearchPort`/`DocumentRepository` reales — sin aprobar todavia.
+- [ ] Upload, extraccion, chunking, normalizacion — sin aprobar todavia.
+- [ ] Retrieval, citas, seleccion de documentos en el chat, panel `/knowledge` — sin aprobar todavia.
 
-No se debe iniciar ninguna tarea fuera del Sprint 4 sin aprobacion del propietario.
+No se debe avanzar el resto del Sprint 5 (ni Sprint 6+) sin aprobacion explicita del propietario.
 
 ## Bugs corregidos (frontend, reportados 2026-07-16, cerrados 2026-07-16)
 

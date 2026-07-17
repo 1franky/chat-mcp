@@ -4,5 +4,18 @@ import java.util.List;
 
 public interface EmbeddingProviderPort {
 
-    List<float[]> embed(String modelId, List<String> inputs);
+    EmbeddingBatch embed(String modelId, List<String> inputs);
+
+    record EmbeddingBatch(int dimension, List<float[]> vectors) {
+
+        public EmbeddingBatch {
+            vectors = List.copyOf(vectors);
+            for (float[] vector : vectors) {
+                if (vector.length != dimension) {
+                    throw new IllegalArgumentException(
+                            "Embedding vector length does not match the declared dimension");
+                }
+            }
+        }
+    }
 }

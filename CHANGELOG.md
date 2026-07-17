@@ -4,6 +4,12 @@ Todos los cambios relevantes del proyecto se documentan aquí. El formato sigue 
 
 ## [Unreleased]
 
+### Added — Sprint 5 RAG: esquema y EmbeddingProviderPort (2026-07-17)
+
+- Migración `V6` que corrige las restricciones `CHECK` de proveedor para incluir `MINIMAX` (bug detectado al preparar esta migración).
+- Migración `V7`: esquema `rag` con `document`, `document_chunk` (vector 1536 + índice HNSW coseno) y `message_document` (relación `SELECTED`/`CITED`), con ownership, estados de procesamiento e idempotencia por hash.
+- `EmbeddingProviderPort` con `EmbeddingBatch` (dimensión + vectores autovalidados) y `FakeEmbeddingProviderAdapter` determinista sin red, wireado tras `app.integrations.mode=fake`. Resto del sprint (upload, storage, retrieval, UI) sigue sin aprobar.
+
 ### Added — Proveedor MiniMax (2026-07-17)
 
 - Nuevo tipo de proveedor `MINIMAX`: host fijo `https://api.minimax.io/v1`, autenticación bearer y Chat Completions compatible con OpenAI (streaming SSE incluido), siguiendo el mismo patrón que BytePlus. No publica catálogo de modelos, así que el model ID se configura manualmente como `CONFIGURED`.
