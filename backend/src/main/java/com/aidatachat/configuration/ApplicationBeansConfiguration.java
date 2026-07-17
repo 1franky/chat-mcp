@@ -1,14 +1,20 @@
 package com.aidatachat.configuration;
 
+import com.aidatachat.adapters.out.fake.FakeDocumentRepository;
+import com.aidatachat.adapters.out.fake.FakeDocumentStorageAdapter;
 import com.aidatachat.adapters.out.fake.FakeEmbeddingProviderAdapter;
 import com.aidatachat.adapters.out.fake.FakeLlmProviderAdapter;
 import com.aidatachat.adapters.out.fake.FakeMcpGateway;
+import com.aidatachat.adapters.out.fake.FakeVectorSearchAdapter;
 import com.aidatachat.adapters.out.mcp.McpAuthProvider;
 import com.aidatachat.adapters.out.mcp.McpDestinationPolicy;
 import com.aidatachat.adapters.out.mcp.McpHttpClient;
 import com.aidatachat.adapters.out.mcp.McpSessionManager;
 import com.aidatachat.adapters.out.mcp.NoOpMcpAuthProvider;
 import com.aidatachat.adapters.out.mcp.RealMcpGateway;
+import com.aidatachat.adapters.out.persistence.rag.DocumentJpaAdapter;
+import com.aidatachat.adapters.out.persistence.rag.PgVectorSearchAdapter;
+import com.aidatachat.adapters.out.persistence.rag.SpringDataDocumentRepository;
 import com.aidatachat.adapters.out.provider.AnthropicProviderAdapter;
 import com.aidatachat.adapters.out.provider.BytePlusProviderAdapter;
 import com.aidatachat.adapters.out.provider.ConfiguredLlmChatGateway;
@@ -21,6 +27,7 @@ import com.aidatachat.adapters.out.provider.ProviderHttpClient;
 import com.aidatachat.adapters.out.security.AesGcmCredentialCipherAdapter;
 import com.aidatachat.adapters.out.security.Argon2PasswordHashAdapter;
 import com.aidatachat.adapters.out.security.SpringSessionInvalidationAdapter;
+import com.aidatachat.adapters.out.storage.FilesystemDocumentStorageAdapter;
 import com.aidatachat.application.port.in.ChatUseCase;
 import com.aidatachat.application.port.in.McpStatusUseCase;
 import com.aidatachat.application.port.in.SystemStatusUseCase;
@@ -52,6 +59,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.session.jdbc.JdbcIndexedSessionRepository;
@@ -81,6 +89,52 @@ public class ApplicationBeansConfiguration {
             matchIfMissing = true)
     FakeEmbeddingProviderAdapter fakeEmbeddingProviderAdapter() {
         return new FakeEmbeddingProviderAdapter();
+    }
+
+    @Bean
+    @ConditionalOnProperty(
+            name = "app.integrations.mode",
+            havingValue = "fake",
+            matchIfMissing = true)
+    FakeDocumentRepository fakeDocumentRepository() {
+        return new FakeDocumentRepository();
+    }
+
+    @Bean
+    @ConditionalOnProperty(
+            name = "app.integrations.mode",
+            havingValue = "fake",
+            matchIfMissing = true)
+    FakeDocumentStorageAdapter fakeDocumentStorageAdapter() {
+        return new FakeDocumentStorageAdapter();
+    }
+
+    @Bean
+    @ConditionalOnProperty(
+            name = "app.integrations.mode",
+            havingValue = "fake",
+            matchIfMissing = true)
+    FakeVectorSearchAdapter fakeVectorSearchAdapter() {
+        return new FakeVectorSearchAdapter();
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "app.integrations.mode", havingValue = "real")
+    DocumentJpaAdapter documentJpaAdapter(SpringDataDocumentRepository documents) {
+        return new DocumentJpaAdapter(documents);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "app.integrations.mode", havingValue = "real")
+    FilesystemDocumentStorageAdapter filesystemDocumentStorageAdapter(
+            @Value("${app.rag.storage.path:/var/lib/ai-data-chat/documents}") String basePath) {
+        return new FilesystemDocumentStorageAdapter(basePath);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "app.integrations.mode", havingValue = "real")
+    PgVectorSearchAdapter pgVectorSearchAdapter(JdbcTemplate jdbcTemplate) {
+        return new PgVectorSearchAdapter(jdbcTemplate);
     }
 
     @Bean

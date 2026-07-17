@@ -4,6 +4,15 @@ Todos los cambios relevantes del proyecto se documentan aquí. El formato sigue 
 
 ## [Unreleased]
 
+### Added — Sprint 5 RAG: DocumentRepository/DocumentStoragePort/VectorSearchPort (2026-07-17)
+
+- `DocumentRepository` ampliado (find/save/delete/paginación con filtro de estado) con adaptador JPA real `DocumentJpaAdapter` sobre `rag.document` y fake en memoria.
+- `VectorSearchPort` con adaptador real `PgVectorSearchAdapter`: primer uso de JDBC nativo (`JdbcTemplate` + `com.pgvector:pgvector`) en `src/main`, ya que Hibernate no soporta el tipo `vector` en este stack. `index()` actualiza embeddings de chunks existentes; `search()` ordena por distancia coseno vía el índice HNSW.
+- `DocumentStoragePort` con adaptador real `FilesystemDocumentStorageAdapter` sobre el volumen Docker `chat-documents`, con saneamiento anti path-traversal.
+- Fakes deterministas en memoria para los tres ports, wireados junto a los reales tras `app.integrations.mode`.
+- Nuevo modelo de dominio `Document`/`DocumentStatus`. Sin caso de uso ni endpoint todavía — resto del sprint (upload, extracción, chunking, retrieval, UI) sigue sin aprobar.
+- 26 tests nuevos (17 unitarios + 9 de integración/migración contra Postgres real). `./mvnw verify` completo en verde (89/89).
+
 ### Added — Sprint 5 RAG: esquema y EmbeddingProviderPort (2026-07-17)
 
 - Migración `V6` que corrige las restricciones `CHECK` de proveedor para incluir `MINIMAX` (bug detectado al preparar esta migración).
