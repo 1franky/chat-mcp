@@ -13,23 +13,25 @@ modelo y capacidades, y sólo después descifra la credencial en backend.
 | `OPENAI` | `https://api.openai.com/v1`, bearer API key | `GET /models` | `GET /models` |
 | `ANTHROPIC` | `https://api.anthropic.com/v1`, `x-api-key` y `anthropic-version: 2023-06-01` | `GET /models` | `GET /models?limit=1000` |
 | `BYTEPLUS` | Región permitida de ModelArk y bearer `ARK_API_KEY` | `POST /chat/completions` con salida máxima de un token | No se inventa un catálogo: conserva el model ID o endpoint ID como `CONFIGURED` |
+| `MINIMAX` | `https://api.minimax.io/v1`, bearer API key | `POST /chat/completions` con salida máxima de un token | No expone catálogo público: conserva el model ID como `CONFIGURED` |
 | `OPENAI_COMPATIBLE` | Base URL, API key y rutas configurables | Catálogo, Responses o Chat Completions según configuración | Best-effort si existe `modelsPath`; si no, conserva el ID configurado |
 | `OLLAMA` | Base URL interna, sin clave por defecto | `GET /api/tags` | `GET /api/tags` |
 | `FAKE` | En proceso, sin red ni clave | Determinista | `fake-chat-v1` |
 
 El chat usa OpenAI Responses (`response.output_text.delta`), Anthropic Messages SSE,
-BytePlus/OpenAI-compatible Chat Completions SSE y Ollama NDJSON. OpenAI-compatible también puede
-usar Responses según su ruta configurada. Todos se traducen a un stream interno con contenido,
-terminacion, uso, razon y request ID opcionales. Las pruebas de contrato levantan un servidor HTTP
-local y nunca invocan APIs pagadas.
+BytePlus/MiniMax/OpenAI-compatible Chat Completions SSE y Ollama NDJSON. OpenAI-compatible también
+puede usar Responses según su ruta configurada. Todos se traducen a un stream interno con
+contenido, terminacion, uso, razon y request ID opcionales. Las pruebas de contrato levantan un
+servidor HTTP local y nunca invocan APIs pagadas.
 
-Fuentes oficiales verificadas el 2026-07-15:
+Fuentes oficiales verificadas el 2026-07-15 (MiniMax verificado el 2026-07-17):
 
 - [OpenAI Models API](https://platform.openai.com/docs/api-reference/models/list)
 - [OpenAI Responses](https://platform.openai.com/docs/api-reference/responses)
 - [Anthropic Models API](https://platform.claude.com/docs/en/api/models/list)
 - [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages/create)
 - [BytePlus compatible con OpenAI](https://docs.byteplus.com/api/docs/ModelArk/1330626)
+- [MiniMax Chat Completions compatible con OpenAI](https://platform.minimax.io/docs/api-reference/text-chat-openai)
 - [Ollama: listar modelos](https://docs.ollama.com/api/tags)
 - [OpenAI Responses streaming](https://developers.openai.com/api/reference/resources/responses/methods/create)
 - [Anthropic Messages streaming](https://platform.claude.com/docs/en/build-with-claude/streaming)
@@ -62,7 +64,7 @@ metadata fiable.
 
 Un model ID manual se valida mediante catálogo cuando existe. Si el proveedor no ofrece catálogo,
 se realiza una invocación acotada sólo cuando el usuario solicita explícitamente validarlo. BytePlus
-usa una salida máxima de un token; esa acción puede tener coste en una cuenta real.
+y MiniMax usan una salida máxima de un token; esa acción puede tener coste en una cuenta real.
 
 ## API
 

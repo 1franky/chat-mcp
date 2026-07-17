@@ -420,6 +420,9 @@ public final class ProviderManagementService implements ProviderManagementUseCas
         if (type == ProviderType.BYTEPLUS && (region == null || configuredModelId == null)) {
             throw new IllegalArgumentException("BytePlus region and model ID are required");
         }
+        if (type == ProviderType.MINIMAX && configuredModelId == null) {
+            throw new IllegalArgumentException("MiniMax model ID is required");
+        }
         if (type == ProviderType.OPENAI_COMPATIBLE
                 && command.modelsPath() == null
                 && configuredModelId == null) {

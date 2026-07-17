@@ -50,6 +50,7 @@ export class ProvidersPage {
     { value: 'OPENAI', label: 'OpenAI' },
     { value: 'ANTHROPIC', label: 'Anthropic' },
     { value: 'BYTEPLUS', label: 'BytePlus ModelArk' },
+    { value: 'MINIMAX', label: 'MiniMax' },
     { value: 'OPENAI_COMPATIBLE', label: 'OpenAI compatible' },
     { value: 'OLLAMA', label: 'Ollama' },
     { value: 'FAKE', label: 'Fake determinista' },

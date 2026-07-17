@@ -11,6 +11,7 @@ import com.aidatachat.adapters.out.mcp.RealMcpGateway;
 import com.aidatachat.adapters.out.provider.AnthropicProviderAdapter;
 import com.aidatachat.adapters.out.provider.BytePlusProviderAdapter;
 import com.aidatachat.adapters.out.provider.ConfiguredLlmChatGateway;
+import com.aidatachat.adapters.out.provider.MiniMaxProviderAdapter;
 import com.aidatachat.adapters.out.provider.OllamaProviderAdapter;
 import com.aidatachat.adapters.out.provider.OpenAiCompatibleProviderAdapter;
 import com.aidatachat.adapters.out.provider.OpenAiProviderAdapter;
@@ -182,6 +183,11 @@ public class ApplicationBeansConfiguration {
             ProviderHttpClient http,
             @Value("${app.providers.byteplus.ap-southeast-1-base-url}") String baseUrl) {
         return new BytePlusProviderAdapter(http, Map.of("ap-southeast-1", baseUrl));
+    }
+
+    @Bean
+    MiniMaxProviderAdapter miniMaxProviderAdapter(ProviderHttpClient http) {
+        return new MiniMaxProviderAdapter(http);
     }
 
     @Bean
