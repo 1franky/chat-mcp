@@ -7,9 +7,11 @@ import static org.assertj.core.data.Offset.offset;
 import com.aidatachat.application.port.in.IdentityUseCase;
 import com.aidatachat.application.port.in.IdentityUseCase.RegisterCommand;
 import com.aidatachat.application.port.out.VectorSearchPort;
+import com.aidatachat.application.port.out.VectorSearchPort.ChunkRecord;
 import com.aidatachat.application.port.out.VectorSearchPort.VectorMatch;
 import com.aidatachat.application.port.out.VectorSearchPort.VectorRecord;
 import com.aidatachat.domain.model.UserAccount;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -19,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -129,6 +132,67 @@ class PgVectorSearchAdapterIntegrationTest {
                         Integer.class,
                         documentId);
         assertThat(remaining).isZero();
+    }
+
+    @Test
+    void replaceChunksIsIdempotentAcrossReprocessingAttempts() {
+        UUID firstChunk = UUID.randomUUID();
+        vectorSearch.replaceChunks(
+                ownerId, documentId, List.of(chunkRecord(firstChunk, 0, unitVector(0))));
+
+        UUID secondChunk = UUID.randomUUID();
+        vectorSearch.replaceChunks(
+                ownerId, documentId, List.of(chunkRecord(secondChunk, 0, unitVector(1))));
+
+        Integer count =
+                jdbc.queryForObject(
+                        "SELECT count(*) FROM rag.document_chunk WHERE document_id = ?",
+                        Integer.class,
+                        documentId);
+        assertThat(count).isEqualTo(1);
+        List<VectorMatch> matches = vectorSearch.search(ownerId, unitVector(1), 5);
+        assertThat(matches.getFirst().chunkId()).isEqualTo(secondChunk);
+    }
+
+    @Test
+    void replaceChunksRollsBackTheDeleteWhenTheInsertBatchFails() {
+        UUID originalChunk = UUID.randomUUID();
+        vectorSearch.replaceChunks(
+                ownerId, documentId, List.of(chunkRecord(originalChunk, 0, unitVector(0))));
+
+        assertThatThrownBy(
+                        () ->
+                                vectorSearch.replaceChunks(
+                                        ownerId,
+                                        documentId,
+                                        List.of(
+                                                // Duplicate chunk_index within the same document
+                                                // violates the UNIQUE(document_id, chunk_index)
+                                                // constraint mid-batch.
+                                                chunkRecord(UUID.randomUUID(), 0, unitVector(1)),
+                                                chunkRecord(UUID.randomUUID(), 0, unitVector(2)))))
+                .isInstanceOf(DataAccessException.class);
+
+        Integer count =
+                jdbc.queryForObject(
+                        "SELECT count(*) FROM rag.document_chunk WHERE document_id = ?",
+                        Integer.class,
+                        documentId);
+        assertThat(count).isEqualTo(1);
+        List<VectorMatch> matches = vectorSearch.search(ownerId, unitVector(0), 5);
+        assertThat(matches.getFirst().chunkId()).isEqualTo(originalChunk);
+    }
+
+    private ChunkRecord chunkRecord(UUID chunkId, int chunkIndex, float[] embedding) {
+        return new ChunkRecord(
+                chunkId,
+                chunkIndex,
+                "contenido de prueba",
+                null,
+                null,
+                "test-embedding-model",
+                embedding,
+                Instant.now());
     }
 
     private UserAccount register(String email) {

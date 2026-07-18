@@ -4,11 +4,13 @@
 
 El propietario del proyecto aprobó arrancar el Sprint 5 explícitamente el 2026-07-17, empezando por
 el esquema de base de datos y `EmbeddingProviderPort`; el mismo día aprobó los adaptadores reales y
-fake para `DocumentRepository`, `DocumentStoragePort` y `VectorSearchPort`; y después el endpoint de
-subida `POST /api/documents` con sus protecciones. Todavía no existen extracción de texto, chunking,
-embeddings reales, retrieval ni citas: un documento subido queda en `UPLOADED` sin procesarse más.
-El resto de este sprint (extracción, chunking, retrieval, citas y el panel `/knowledge`) sigue sin
-aprobar y no debe iniciarse sin luz verde explícita — ver `TASKS.md`.
+fake para `DocumentRepository`, `DocumentStoragePort` y `VectorSearchPort`; después el endpoint de
+subida `POST /api/documents` con sus protecciones; y el 2026-07-18 aprobó extracción, normalización
+y chunking, que llevan un documento de `UPLOADED` a `READY` con chunks y embeddings reales
+(sobre el fake) indexados. Todavía no existen retrieval ni citas: los chunks quedan indexados pero
+nada los consulta. El resto de este sprint (retrieval, citas, selección de documentos en el chat y
+el panel `/knowledge`) sigue sin aprobar y no debe iniciarse sin luz verde explícita — ver
+`TASKS.md`.
 
 ### Esquema `rag` (migraciones `V6`/`V7`)
 
@@ -49,9 +51,12 @@ public interface EmbeddingProviderPort {
 Implementación disponible: `FakeEmbeddingProviderAdapter` (modelo `fake-embedding-v1`, dimensión
 1536), determinista y sin red — genera un vector unitario por hash SHA-256 del texto de entrada, de
 forma que el mismo texto siempre produce el mismo vector y textos distintos producen vectores
-distintos. Se activa igual que el resto de fakes, con `app.integrations.mode=fake`
-(`matchIfMissing = true`). Todavía no existe un adaptador real (OpenAI embeddings, etc.); se añadirá
-cuando el propietario apruebe esa parte del sprint.
+distintos. **Desde que `DocumentProcessingService` lo consume (2026-07-18), el bean pasó a estar
+siempre activo, sin `@ConditionalOnProperty` sobre `app.integrations.mode`** — no hay ningún
+adaptador real todavía (no aprobado), así que bajo `mode=real` no había nada a lo que alternar y el
+contexto de Spring no arrancaría sin este cambio. Es un estado deliberadamente temporal: en cuanto
+se apruebe y añada un adaptador real de embeddings, este bean debe volver a condicionarse igual que
+el resto de fakes.
 
 ### `DocumentRepository`, `DocumentStoragePort`, `VectorSearchPort`
 
@@ -77,25 +82,23 @@ mismo patrón JPA que `ConversationJpaAdapter`: filtra siempre por `ownerId` exp
 de nombre de archivo antes de resolver la ruta bajo `basePath/ownerId`, para que ningún segmento
 `..` pueda escapar del directorio del propietario. Fake en memoria `FakeDocumentStorageAdapter`.
 
-`VectorSearchPort` (`index`/`search`/`deleteByDocument`, ya definido en el sprint anterior) tiene
-ahora `PgVectorSearchAdapter` (`adapters/out/persistence/rag/`): **JDBC nativo vía `JdbcTemplate` +
+`VectorSearchPort` (`search`/`deleteByDocument`, ya definido en el sprint anterior, más
+`replaceChunks` desde 2026-07-18 — ver la sección de chunking abajo) tiene ahora
+`PgVectorSearchAdapter` (`adapters/out/persistence/rag/`): **JDBC nativo vía `JdbcTemplate` +
 la librería `com.pgvector:pgvector`**, no JPA — Hibernate no tiene soporte nativo para el tipo
 `vector` en este stack, así que este adaptador es el único punto del backend que usa SQL directo en
 lugar de un repositorio Spring Data. Decisiones de diseño:
 - `index()` hace `UPDATE` de la columna `embedding` sobre chunks que **ya existen** en
-  `rag.document_chunk`, nunca `INSERT` — la columna es `NOT NULL` sin valor por defecto, así que la
-  fila completa (contenido + vector inicial) solo puede crearse cuando exista chunking real, que es
-  trabajo de un sprint futuro. Si un `chunkId` no existe, lanza `IllegalStateException` (fallo
-  defensivo, sin fallback silencioso). Esto es coherente con el futuro
-  `POST /api/documents/{id}/reindex` ya documentado abajo.
+  `rag.document_chunk`, nunca `INSERT`. Ningún caso de uso lo invoca todavía — queda reservado para
+  un futuro reindex que solo recalcule embeddings sobre contenido ya existente (p. ej. al cambiar de
+  modelo de embeddings), a diferencia de `replaceChunks`, que sí es la escritura inicial real usada
+  por el chunking (ver abajo). Si un `chunkId` no existe, lanza `IllegalStateException`.
 - `search()` ordena por distancia coseno (`<=>`) usando el índice HNSW ya creado en `V7`;
   `VectorMatch.score()` es `1 - distancia` (similitud coseno). El fake usa el mismo criterio para
   ser intercambiable.
-- No se creó ningún port/repositorio adicional para el contenido no-vectorial de `document_chunk`
-  ni para `rag.message_document`: ningún caso de uso los consume todavía (extracción/chunking y
-  retrieval/citas siguen sin aprobar), así que hacerlo habría sido diseñar en el vacío. Por el mismo
-  motivo tampoco se crearon los modelos de dominio `DocumentChunk`/`MessageDocument` — solo
-  `Document`/`DocumentStatus`, que sí mapean 1:1 a un port ya implementado.
+- Nuevo dominio `DocumentChunk` (2026-07-18): mapea 1:1 el CHECK de `rag.document_chunk`. No se creó
+  ningún modelo de dominio ni port para `rag.message_document` — sigue sin caso de uso (retrieval/
+  citas no aprobado todavía).
 
 Los seis adaptadores (`DocumentJpaAdapter`, `FilesystemDocumentStorageAdapter`,
 `PgVectorSearchAdapter` y sus tres fakes) son beans condicionales por `app.integrations.mode` en
@@ -164,16 +167,120 @@ sesión, 403 sin CSRF, aislamiento por owner vía HTTP), más 2 nuevos para
 `findByOwnerIdAndContentHash` (`FakeDocumentRepositoryTest`, `DocumentJpaAdapterIntegrationTest`).
 `./mvnw verify` completo del backend en verde (113/113).
 
+### Extracción, normalización y chunking
+
+Aprobado el 2026-07-18. `DocumentManagementService.uploadDocument` dispara, tras guardar un
+documento **nuevo** (`created=true`) y su auditoría, `documentProcessingExecutor.execute(() ->
+documentProcessing.processDocument(ownerId, documentId))` — fire-and-forget sobre un
+`ExecutorService` propio (`documentProcessingExecutor`, cached pool, **separado** de
+`mcpToolOrchestrationExecutor` para no competir por hilos con el tool-calling del chat). La
+respuesta HTTP del upload sigue siendo síncrona e inmediata; el documento queda en `UPLOADED` y el
+pipeline corre después.
+
+`DocumentProcessingUseCase`/`DocumentProcessingService` (nuevo, sin anotaciones Spring) orquesta:
+
+```text
+PROCESSING → extracción (con timeout) → normalización + chunking → embeddings por lotes
+           → replaceChunks (indexación) → READY
+```
+
+- **Extracción**: nuevo puerto `DocumentTextExtractionPort` (`extract(extension, mimeType,
+  content)` → lista de `ExtractedPage(pageNumber, sectionLabel, text)`) con un único adaptador
+  `DocumentTextExtractorAdapter` (`adapters/out/extraction/`), sin fake — determinista y 100% local,
+  mismo precedente que la detección MIME con Tika. El dispatch es por **extensión**, no por MIME
+  detectado: `text/plain` es ambiguo entre txt/md/csv/json (varios de esos formatos no tienen magic
+  bytes fiables y el upload ya los deja caer a `text/plain`), así que el MIME solo sirve como dato
+  informativo aquí.
+  - PDF: `org.apache.pdfbox:pdfbox` — una `ExtractedPage` por página real, 1-indexada (coincide con
+    el CHECK `page_number > 0`). `max-pages`/`max-characters` (`app.rag.extraction.*`) se hacen
+    cumplir **dentro del propio adaptador**, lo antes posible (número de páginas comprobado antes de
+    extraer ningún texto; total de caracteres comprobado incrementalmente página a página, abortando
+    en cuanto se supera) — protección real contra agotamiento de recursos, no solo contabilidad
+    posterior.
+  - DOCX: `org.apache.poi:poi-ooxml` — texto completo como una única página (`pageNumber`/
+    `sectionLabel` ambos `null`). Deliberadamente **no** se trocea por estilos de heading (`Heading1`,
+    etc.): esos estilos varían entre versiones/locales de Word y depender de ellos habría sido frágil
+    para un v1; POI ya deshabilita XXE por defecto desde la rama 4.x (`XMLHelper`) y trae su propio
+    guardián anti zip-bomb (`ZipSecureFile`, defensa en profundidad sobre la ya existente en el
+    upload) — verificado con un test que craftea un `.docx` con una entidad XML externa apuntando a
+    un archivo local y confirma que nunca se resuelve en el texto extraído.
+  - Markdown: troceado en secciones por encabezado (`^#{1,6}\s+.+$`), `sectionLabel` = texto del
+    heading (recortado a 255 caracteres, el límite del CHECK), `pageNumber` siempre `null`.
+  - TXT/CSV/JSON: decodificados como UTF-8 **estricto** (`CodingErrorAction.REPORT`) — contenido que
+    no es UTF-8 válido aborta con `unsupported_text_encoding` en vez de decodificar con reemplazo
+    silencioso, que corrompería lo que luego se indexa y cita.
+- **Normalización + chunking**: `TextChunker` (`application/service/`, clase pura sin Spring).
+  Normaliza preservando la distinción entre salto de línea simple y doble (un salto doble marca un
+  límite de párrafo; colapsarlo habría degradado el chunking a una ventana deslizante pura sin
+  avisar), colapsa espacios/tabs horizontales y recorta. Separa en párrafos, fusiona (`greedy merge`)
+  párrafos pequeños consecutivos hasta acercarse a `app.rag.chunking.chunk-size-chars` (default
+  1800, con margen bajo el límite de 8000 del CHECK), y solo sub-trocea con ventana deslizante +
+  solapamiento (`overlap-chars`, default 200, corte en el espacio en blanco más cercano) los
+  párrafos que siguen excediendo el tamaño. Opera **por cada `ExtractedPage` de forma
+  independiente** — un chunk nunca cruza un límite de página/sección, así que siempre tiene un
+  `pageNumber`/`sectionLabel` único y correcto para las futuras citas; `chunk_index` es un contador
+  global monótono creciente sobre todo el documento. Aborta con `too_many_chunks` si se supera
+  `max-chunks-per-document` (default 500) y con `no_extractable_text` si el resultado no produce
+  ningún chunk (p. ej. un PDF escaneado sin capa de texto: no hay OCR en el alcance de este sprint).
+- **Embeddings**: lotes de `app.rag.embedding.batch-size` (default 64) contra `EmbeddingProviderPort`
+  con el modelo configurable `app.rag.embedding.model-id` (default `fake-embedding-v1`).
+- **Indexación**: `VectorSearchPort.replaceChunks(ownerId, documentId, List<ChunkRecord>)` (nuevo
+  método, ver la sección de `VectorSearchPort` arriba) — implementado en `PgVectorSearchAdapter` como
+  `@Transactional`: `DELETE` de los chunks existentes del documento seguido de un `batchUpdate`
+  `INSERT` (mismo patrón `BatchPreparedStatementSetter` + `PGvector` que ya usa `index()`).
+  Delete-then-insert-all en vez de upsert por `chunk_index`: más simple y con la misma garantía de
+  idempotencia — un reprocesamiento que produce menos chunks que el anterior no deja índices
+  huérfanos. Verificado contra Postgres real que un fallo a mitad del batch (p. ej. un `chunk_index`
+  duplicado) revierte también el `DELETE` (atomicidad real, no solo del `INSERT`).
+- **Timeout de extracción**: `app.rag.extraction.timeout-seconds` (default 30) vía
+  `Future.get(timeout)` + `cancel(true)` sobre el mismo `documentProcessingExecutor` (cached pool, así
+  que siempre hay un hilo disponible para el `submit` anidado). **Limitación de v1 documentada, no
+  resuelta**: ni PDFBox ni POI garantizan honrar `Thread.interrupt()` en un bucle CPU-bound — el
+  timeout protege al proceso general (el documento pasa a `FAILED` y el sistema sigue funcionando)
+  pero no garantiza liberar el hilo subyacente ante un input adversarial específicamente craftado.
+  Mitigado en la práctica por el tamaño de archivo ya acotado en upload (25 MiB) y por el chequeo de
+  `max-pages` como primera línea de defensa.
+- **Fallos**: cada etapa lanza `DocumentProcessingException` con un `reasonCode` específico y
+  acotado — `extraction_timeout`, `extraction_failed`, `unsupported_text_encoding`,
+  `too_many_pages`, `content_too_large`, `too_many_chunks`, `no_extractable_text`,
+  `embedding_failed` — persistido tal cual como `failureReason` del documento; cualquier excepción no
+  anticipada cae a `processing_failed`. Nunca se persiste stack trace ni contenido del documento.
+  Auditoría `DOCUMENT_PROCESSED`/`DOCUMENT_PROCESSING_FAILED` (metadata acotada: `chunkCount` o
+  `reasonCode`, nunca contenido).
+- **Riesgo de concurrencia mitigado**: `DocumentJpaAdapter.save()` hace upsert por re-lectura — si no
+  encuentra la fila, inserta una nueva. Sin guarda, borrar un documento mientras se está procesando
+  podría "resucitarlo" como `READY` sin chunks reales al terminar el procesamiento. Mitigado con un
+  chequeo de existencia (`findByIdAndOwnerId`) inmediatamente antes de cada guardado final (al pasar
+  a `PROCESSING` y al finalizar con `READY`/`FAILED`) — no elimina el TOCTOU al 100%, pero reduce la
+  ventana de riesgo de "toda la duración del procesamiento" a "el instante entre el chequeo y el
+  guardado".
+- **No durable**: el trigger es un `Runnable` en memoria sobre un `ExecutorService` — si el backend
+  se reinicia mientras un documento está en `PROCESSING`, queda atascado ahí sin reintento
+  automático. Mismo patrón de no-durabilidad ya aceptado hoy por `mcpToolOrchestrationExecutor`;
+  documentado como limitación de v1, no resuelto.
+- **Diferido explícitamente**: `POST /api/documents/{id}/reindex` (el `UseCase` ya deja el
+  reprocesamiento idempotente y listo, pero el endpoint no aporta valor real sin un proveedor de
+  embeddings real — con el fake, reprocesar el mismo contenido produce los mismos vectores) y un
+  adaptador real de `EmbeddingProviderPort`.
+
+Verificado el 2026-07-18: unitarios — `DocumentChunkTest`, `TextChunkerTest`,
+`DocumentTextExtractorAdapterTest` (incluye el caso XXE craftado y el de encoding inválido),
+`FakeVectorSearchAdapterTest` ampliado, `DocumentProcessingServiceTest` (camino feliz con
+extracción/chunking/embeddings reales contra el fake, cada `reasonCode` de fallo, y el caso de
+borrado durante el procesamiento sin resurrección), `DocumentManagementServiceTest` ampliado (el
+trigger solo dispara en uploads nuevos, sin bloquear la respuesta HTTP). Integración contra Postgres
+real vía Testcontainers — `PgVectorSearchAdapterIntegrationTest` ampliado (`replaceChunks`
+idempotente y con rollback atómico), `DocumentControllerIntegrationTest` ampliado (sube un documento
+real vía HTTP, espera a que llegue a `READY` y confirma chunks reales en `rag.document_chunk`).
+`./mvnw verify` completo del backend en verde (159/159).
+
 ## Pendiente de aprobación
 
-- Extracción, normalización y chunking para PDF, DOCX, TXT, Markdown, CSV, JSON (esto es lo que
-  crearía las filas de `rag.document_chunk` que `VectorSearchPort.index()` espera encontrar; también
-  cubriría XXE, límites de páginas/caracteres/chunks y timeout de extracción, diferidos arriba).
 - Retrieval combinando búsqueda vectorial y full-text search, top-k/umbral configurables, citas y
   tratamiento del contenido recuperado como no confiable (ignorar instrucciones embebidas en
   documentos).
-- Endpoints `GET/POST /api/documents`, `GET /api/documents/{id}`, `POST
-  /api/documents/{id}/reindex`, `DELETE /api/documents/{id}`.
+- Endpoint `POST /api/documents/{id}/reindex`.
+- Adaptador real de `EmbeddingProviderPort` (OpenAI embeddings u otro proveedor).
 - Selector de documentos en el composer del chat, estado de indexación, citas en los mensajes y
   panel `/knowledge`.
 

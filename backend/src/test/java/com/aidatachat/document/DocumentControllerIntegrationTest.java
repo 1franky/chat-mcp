@@ -18,7 +18,9 @@ import com.aidatachat.application.port.in.IdentityUseCase;
 import com.aidatachat.application.port.in.IdentityUseCase.RegisterCommand;
 import com.aidatachat.domain.model.UserAccount;
 import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -169,6 +171,56 @@ class DocumentControllerIntegrationTest {
                 .andExpect(status().isNoContent());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM rag.document", Integer.class))
                 .isZero();
+    }
+
+    @Test
+    void processesAnUploadedDocumentIntoReadyWithRealChunksAndEmbeddings() throws Exception {
+        UserAccount owner = register("owner@example.test");
+        byte[] content =
+                "Contenido real y suficiente para generar al menos un chunk indexado."
+                        .getBytes(StandardCharsets.UTF_8);
+
+        UploadDocumentResult uploaded =
+                documentsUseCase.uploadDocument(
+                        owner.id(),
+                        new UploadDocumentCommand(
+                                "informe.txt",
+                                content.length,
+                                new ByteArrayInputStream(content),
+                                "127.0.0.1"));
+        UUID documentId = uploaded.document().id();
+
+        String status = awaitTerminalStatus(documentId);
+
+        assertThat(status).isEqualTo("READY");
+        Integer chunkRowCount =
+                jdbc.queryForObject(
+                        "SELECT count(*) FROM rag.document_chunk WHERE document_id = ?",
+                        Integer.class,
+                        documentId);
+        assertThat(chunkRowCount).isGreaterThan(0);
+        Integer documentChunkCount =
+                jdbc.queryForObject(
+                        "SELECT chunk_count FROM rag.document WHERE id = ?",
+                        Integer.class,
+                        documentId);
+        assertThat(documentChunkCount).isEqualTo(chunkRowCount);
+    }
+
+    private String awaitTerminalStatus(UUID documentId) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 5_000;
+        while (System.currentTimeMillis() < deadline) {
+            String status =
+                    jdbc.queryForObject(
+                            "SELECT status FROM rag.document WHERE id = ?",
+                            String.class,
+                            documentId);
+            if (!status.equals("UPLOADED") && !status.equals("PROCESSING")) {
+                return status;
+            }
+            Thread.sleep(50);
+        }
+        throw new AssertionError("Document processing did not reach a terminal state in time");
     }
 
     private UserAccount register(String email) {

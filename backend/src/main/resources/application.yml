@@ -98,6 +98,17 @@ app:
       path: ${RAG_STORAGE_PATH:/var/lib/ai-data-chat/documents}
     upload:
       max-bytes: ${MAX_UPLOAD_BYTES:26214400}
+    extraction:
+      max-pages: ${RAG_EXTRACTION_MAX_PAGES:200}
+      max-characters: ${RAG_EXTRACTION_MAX_CHARACTERS:2000000}
+      timeout-seconds: ${RAG_EXTRACTION_TIMEOUT_SECONDS:30}
+    chunking:
+      chunk-size-chars: ${RAG_CHUNK_SIZE_CHARS:1800}
+      overlap-chars: ${RAG_CHUNK_OVERLAP_CHARS:200}
+      max-chunks-per-document: ${RAG_MAX_CHUNKS_PER_DOCUMENT:500}
+    embedding:
+      model-id: ${RAG_EMBEDDING_MODEL_ID:fake-embedding-v1}
+      batch-size: ${RAG_EMBEDDING_BATCH_SIZE:64}
   providers:
     credential-master-key: ${CREDENTIAL_MASTER_KEY:}
     credential-key-version: ${CREDENTIAL_KEY_VERSION:1}

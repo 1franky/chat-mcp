@@ -5,6 +5,7 @@ import com.aidatachat.application.exception.DocumentStorageException;
 import com.aidatachat.application.exception.DocumentTooLargeException;
 import com.aidatachat.application.exception.UnsupportedDocumentTypeException;
 import com.aidatachat.application.port.in.DocumentManagementUseCase;
+import com.aidatachat.application.port.in.DocumentProcessingUseCase;
 import com.aidatachat.application.port.out.AuditRepository;
 import com.aidatachat.application.port.out.DocumentMimeDetectionPort;
 import com.aidatachat.application.port.out.DocumentRepository;
@@ -26,6 +27,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
 import java.util.zip.ZipInputStream;
 
 public final class DocumentManagementService implements DocumentManagementUseCase {
@@ -52,6 +54,8 @@ public final class DocumentManagementService implements DocumentManagementUseCas
     private final AuditRepository audit;
     private final Clock clock;
     private final long maxUploadBytes;
+    private final DocumentProcessingUseCase documentProcessing;
+    private final ExecutorService documentProcessingExecutor;
 
     public DocumentManagementService(
             DocumentRepository documents,
@@ -59,13 +63,17 @@ public final class DocumentManagementService implements DocumentManagementUseCas
             DocumentMimeDetectionPort mimeDetection,
             AuditRepository audit,
             Clock clock,
-            long maxUploadBytes) {
+            long maxUploadBytes,
+            DocumentProcessingUseCase documentProcessing,
+            ExecutorService documentProcessingExecutor) {
         this.documents = Objects.requireNonNull(documents);
         this.storage = Objects.requireNonNull(storage);
         this.mimeDetection = Objects.requireNonNull(mimeDetection);
         this.audit = Objects.requireNonNull(audit);
         this.clock = Objects.requireNonNull(clock);
         this.maxUploadBytes = maxUploadBytes;
+        this.documentProcessing = Objects.requireNonNull(documentProcessing);
+        this.documentProcessingExecutor = Objects.requireNonNull(documentProcessingExecutor);
     }
 
     @Override
@@ -149,6 +157,8 @@ public final class DocumentManagementService implements DocumentManagementUseCas
                 "DOCUMENT_UPLOADED",
                 command.remoteAddress(),
                 Map.of("mimeType", saved.mimeType(), "byteSize", String.valueOf(saved.byteSize())));
+        documentProcessingExecutor.execute(
+                () -> documentProcessing.processDocument(validOwner, saved.id()));
         return new UploadDocumentResult(toView(saved), true);
     }
 

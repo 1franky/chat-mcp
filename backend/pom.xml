@@ -22,7 +22,9 @@
     <bouncycastle.version>1.84</bouncycastle.version>
     <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
     <maven-enforcer-plugin.version>3.6.2</maven-enforcer-plugin.version>
+    <pdfbox.version>3.0.7</pdfbox.version>
     <pgvector.version>0.1.6</pgvector.version>
+    <poi.version>5.5.1</poi.version>
     <spotless-maven-plugin.version>2.46.1</spotless-maven-plugin.version>
     <tika.version>3.3.1</tika.version>
   </properties>
@@ -54,6 +56,16 @@
     <dependency>
       <groupId>io.micrometer</groupId>
       <artifactId>micrometer-registry-prometheus</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.pdfbox</groupId>
+      <artifactId>pdfbox</artifactId>
+      <version>${pdfbox.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.poi</groupId>
+      <artifactId>poi-ooxml</artifactId>
+      <version>${poi.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.tika</groupId>

@@ -15,6 +15,7 @@ import com.aidatachat.application.port.in.DocumentManagementUseCase.DocumentList
 import com.aidatachat.application.port.in.DocumentManagementUseCase.DocumentView;
 import com.aidatachat.application.port.in.DocumentManagementUseCase.UploadDocumentCommand;
 import com.aidatachat.application.port.in.DocumentManagementUseCase.UploadDocumentResult;
+import com.aidatachat.application.port.in.DocumentProcessingUseCase;
 import com.aidatachat.application.port.out.AuditRepository;
 import com.aidatachat.application.service.DocumentManagementService;
 import com.aidatachat.domain.model.DocumentStatus;
@@ -22,7 +23,14 @@ import java.io.ByteArrayInputStream;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -35,6 +43,9 @@ class DocumentManagementServiceTest {
     private final FakeDocumentRepository documents = new FakeDocumentRepository();
     private final FakeDocumentStorageAdapter storage = new FakeDocumentStorageAdapter();
     private final AuditRepository audit = mock(AuditRepository.class);
+    private final RecordingDocumentProcessing documentProcessing =
+            new RecordingDocumentProcessing();
+    private final ExecutorService documentProcessingExecutor = Executors.newSingleThreadExecutor();
     private DocumentManagementService service;
 
     @BeforeEach
@@ -47,7 +58,37 @@ class DocumentManagementServiceTest {
                         new TikaDocumentMimeDetectionAdapter(),
                         audit,
                         clock,
-                        MAX_UPLOAD_BYTES);
+                        MAX_UPLOAD_BYTES,
+                        documentProcessing,
+                        documentProcessingExecutor);
+    }
+
+    private static final class RecordingDocumentProcessing implements DocumentProcessingUseCase {
+        private final List<UUID[]> calls = Collections.synchronizedList(new ArrayList<>());
+        private volatile CountDownLatch latch = new CountDownLatch(0);
+
+        @Override
+        public void processDocument(UUID ownerId, UUID documentId) {
+            calls.add(new UUID[] {ownerId, documentId});
+            latch.countDown();
+        }
+
+        void expectCalls(int count) {
+            latch = new CountDownLatch(count);
+        }
+
+        boolean awaitCalls() {
+            try {
+                return latch.await(2, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+
+        List<UUID[]> calls() {
+            return calls;
+        }
     }
 
     @Test
@@ -227,6 +268,35 @@ class DocumentManagementServiceTest {
                 .isInstanceOf(DocumentNotFoundException.class);
         assertThatThrownBy(() -> service.deleteDocument(OWNER, missing, "127.0.0.1"))
                 .isInstanceOf(DocumentNotFoundException.class);
+    }
+
+    @Test
+    void triggersBackgroundProcessingForANewUploadWithoutBlockingTheResponse() {
+        documentProcessing.expectCalls(1);
+
+        UploadDocumentResult result =
+                service.uploadDocument(OWNER, command("informe.pdf", DocumentFixtures.pdfBytes()));
+
+        assertThat(result.created()).isTrue();
+        assertThat(result.document().status()).isEqualTo(DocumentStatus.UPLOADED);
+        assertThat(documentProcessing.awaitCalls()).isTrue();
+        assertThat(documentProcessing.calls())
+                .containsExactly(new UUID[] {OWNER, result.document().id()});
+    }
+
+    @Test
+    void doesNotTriggerProcessingAgainForAnIdempotentDuplicateUpload() {
+        documentProcessing.expectCalls(1);
+        service.uploadDocument(OWNER, command("informe.pdf", DocumentFixtures.pdfBytes()));
+        assertThat(documentProcessing.awaitCalls()).isTrue();
+
+        documentProcessing.expectCalls(1);
+        UploadDocumentResult second =
+                service.uploadDocument(OWNER, command("informe.pdf", DocumentFixtures.pdfBytes()));
+
+        assertThat(second.created()).isFalse();
+        assertThat(documentProcessing.awaitCalls()).isFalse();
+        assertThat(documentProcessing.calls()).hasSize(1);
     }
 
     private UploadDocumentCommand command(String filename, byte[] content) {
