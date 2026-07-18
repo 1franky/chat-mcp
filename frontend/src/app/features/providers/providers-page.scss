@@ -27,8 +27,9 @@
 
 .heading h1 {
   margin-bottom: 0.4rem;
-  font-size: clamp(1.8rem, 4vw, 2.6rem);
-  letter-spacing: -0.04em;
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .heading p,
@@ -43,7 +44,7 @@
   padding-top: 0.45rem;
   color: var(--brand-muted);
   font-size: 0.72rem;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.12em;
 }
 
@@ -119,7 +120,7 @@
   background: var(--badge-neutral);
   color: var(--text-secondary);
   font-size: 0.68rem;
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .state[data-state='UP'],
