@@ -16,4 +16,8 @@ public enum ProviderType {
     public boolean requiresConfigurableBaseUrl() {
         return this == OPENAI_COMPATIBLE || this == OLLAMA;
     }
+
+    public boolean allowsOptionalBaseUrl() {
+        return this == MINIMAX;
+    }
 }

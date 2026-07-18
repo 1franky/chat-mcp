@@ -13,7 +13,7 @@ modelo y capacidades, y sólo después descifra la credencial en backend.
 | `OPENAI` | `https://api.openai.com/v1`, bearer API key | `GET /models` | `GET /models` |
 | `ANTHROPIC` | `https://api.anthropic.com/v1`, `x-api-key` y `anthropic-version: 2023-06-01` | `GET /models` | `GET /models?limit=1000` |
 | `BYTEPLUS` | Región permitida de ModelArk y bearer `ARK_API_KEY` | `POST /chat/completions` con salida máxima de un token | No se inventa un catálogo: conserva el model ID o endpoint ID como `CONFIGURED` |
-| `MINIMAX` | `https://api.minimax.io/v1`, bearer API key | `POST /chat/completions` con salida máxima de un token | No expone catálogo público: conserva el model ID como `CONFIGURED` |
+| `MINIMAX` | `https://api.minimax.io/v1` por defecto (Base URL opcional configurable), bearer API key | `POST /chat/completions` con salida máxima de un token | No expone catálogo público: conserva el model ID como `CONFIGURED` |
 | `OPENAI_COMPATIBLE` | Base URL, API key y rutas configurables | Catálogo, Responses o Chat Completions según configuración | Best-effort si existe `modelsPath`; si no, conserva el ID configurado |
 | `OLLAMA` | Base URL interna, sin clave por defecto | `GET /api/tags` | `GET /api/tags` |
 | `FAKE` | En proceso, sin red ni clave | Determinista | `fake-chat-v1` |
@@ -90,6 +90,12 @@ OpenAI-compatible y Ollama exigen que el host exacto esté en `PROVIDER_ALLOWED_
 permite si además aparece en `PROVIDER_ALLOWED_HTTP_HOSTS`; HTTPS es obligatorio para el resto. Se
 rechazan userinfo, query/fragment en la base, redirects, destinos no autorizados y direcciones
 link-local/metadata. El cliente limita timeout y bytes de respuesta y no registra cuerpos.
+
+MiniMax usa por defecto el host fijo `api.minimax.io` (no requiere allowlist, igual que
+OpenAI/Anthropic/BytePlus). Si el usuario configura un Base URL propio para esa conexión —por
+ejemplo el endpoint regional de China `api.minimaxi.com`, u otro proxy compatible— ese destino pasa
+por la misma `ProviderDestinationPolicy` que OpenAI-compatible/Ollama y debe estar en
+`PROVIDER_ALLOWED_HOSTS`/`PROVIDER_ALLOWED_HTTP_HOSTS`.
 
 Ejemplo para un Ollama en la red Docker:
 

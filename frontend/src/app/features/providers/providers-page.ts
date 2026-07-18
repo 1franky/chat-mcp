@@ -230,7 +230,17 @@ export class ProvidersPage {
   }
 
   protected needsBaseUrl(type: ProviderType): boolean {
-    return type === 'OPENAI_COMPATIBLE' || type === 'OLLAMA';
+    return type === 'OPENAI_COMPATIBLE' || type === 'OLLAMA' || type === 'MINIMAX';
+  }
+
+  protected baseUrlPlaceholder(type: ProviderType): string {
+    return type === 'MINIMAX' ? 'https://api.minimax.io/v1' : 'http://ollama:11434';
+  }
+
+  protected baseUrlHint(type: ProviderType): string {
+    return type === 'MINIMAX'
+      ? 'Opcional: por defecto https://api.minimax.io/v1. El host debe estar autorizado por el operador.'
+      : 'El host debe estar autorizado por el operador.';
   }
 
   protected capabilityEntries(

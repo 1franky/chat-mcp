@@ -4,6 +4,12 @@ Todos los cambios relevantes del proyecto se documentan aquí. El formato sigue 
 
 ## [Unreleased]
 
+### Added — Base URL configurable para MiniMax (2026-07-18)
+
+- `MiniMaxProviderAdapter` ahora acepta un `baseUrl` opcional por conexión (default `https://api.minimax.io/v1` si se omite), ya que MiniMax publica endpoints regionales distintos (p. ej. `api.minimaxi.com` en China). Un Base URL personalizado pasa por la misma `ProviderDestinationPolicy` (allowlist SSRF) que ya exigen OpenAI-compatible/Ollama.
+- Nuevo campo "Base URL" en el formulario de proveedores cuando se selecciona MiniMax, con hint indicando el valor por defecto.
+- Verificado manualmente contra el stack Docker Compose real: conexión sin Base URL (usa el default), conexión con Base URL personalizado (se guarda), y prueba de conexión bloqueada por `PROVIDER_DESTINATION_BLOCKED` cuando el host no está en la allowlist.
+
 ### Added — Sprint 5 RAG: endpoint de subida `POST /api/documents` (2026-07-17)
 
 - `DocumentManagementUseCase`/`DocumentManagementService`: sube un documento validando tamaño máximo (`MAX_UPLOAD_BYTES`, ahora sí cableado a `spring.servlet.multipart.*`/`app.rag.upload.max-bytes`), MIME real cruzado contra la extensión declarada, protección ZIP-bomb para `.docx`, hash SHA-256 para idempotencia (`DocumentRepository.findByOwnerIdAndContentHash`, nuevo método), y aislamiento estricto por `owner_id`. El documento queda en `UPLOADED`.
