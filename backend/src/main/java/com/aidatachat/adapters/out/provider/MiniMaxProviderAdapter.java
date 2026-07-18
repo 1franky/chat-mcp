@@ -8,6 +8,7 @@ import com.aidatachat.domain.model.LlmChunk;
 import com.aidatachat.domain.model.ProviderCapabilityProfile;
 import com.aidatachat.domain.model.ProviderProbeResult;
 import com.aidatachat.domain.model.ProviderType;
+import java.net.URI;
 import java.util.List;
 import java.util.concurrent.Flow;
 import tools.jackson.databind.node.ArrayNode;
@@ -28,15 +29,12 @@ public final class MiniMaxProviderAdapter extends AbstractHttpLlmProviderAdapter
                     CapabilityAvailability.UNKNOWN,
                     CapabilityAvailability.UNSUPPORTED);
 
-    private final String baseUrl;
+    private final ProviderDestinationPolicy destinationPolicy;
 
-    public MiniMaxProviderAdapter(ProviderHttpClient http) {
-        this(http, DEFAULT_BASE_URL);
-    }
-
-    MiniMaxProviderAdapter(ProviderHttpClient http, String baseUrl) {
+    public MiniMaxProviderAdapter(
+            ProviderHttpClient http, ProviderDestinationPolicy destinationPolicy) {
         super(http);
-        this.baseUrl = baseUrl;
+        this.destinationPolicy = destinationPolicy;
     }
 
     @Override
@@ -55,7 +53,7 @@ public final class MiniMaxProviderAdapter extends AbstractHttpLlmProviderAdapter
         String token = secret(credential);
         return ProviderStreamingSupport.map(
                 http.postSse(
-                        ProviderUris.append(baseUrl, "/chat/completions"),
+                        ProviderUris.append(effectiveBaseUrl(configuration), "/chat/completions"),
                         headers -> headers.setBearerAuth(token),
                         ProviderStreamingSupport.chatCompletionsBody(request, DEFAULT_MAX_TOKENS)),
                 ProviderStreamingSupport::parseChatCompletions);
@@ -93,9 +91,18 @@ public final class MiniMaxProviderAdapter extends AbstractHttpLlmProviderAdapter
         messages.addObject().put("role", "user").put("content", "ping");
         ProviderHttpClient.JsonResponse response =
                 http.post(
-                        ProviderUris.append(baseUrl, "/chat/completions"),
+                        ProviderUris.append(effectiveBaseUrl(configuration), "/chat/completions"),
                         headers -> headers.setBearerAuth(secret(credential)),
                         body);
         return response.requestId();
+    }
+
+    private String effectiveBaseUrl(ProviderClientConfiguration configuration) {
+        String custom = configuration.baseUrl();
+        if (custom == null) {
+            return DEFAULT_BASE_URL;
+        }
+        destinationPolicy.validateCustomDestination(URI.create(custom));
+        return custom;
     }
 }

@@ -132,7 +132,7 @@ class ProviderAdaptersTest {
     }
 
     @Test
-    void miniMaxUsesFixedBaseUrlAndBoundedProbe() {
+    void miniMaxUsesCustomBaseUrlAndBoundedProbe() {
         server.createContext(
                 "/minimax/chat/completions",
                 exchange -> {
@@ -149,9 +149,12 @@ class ProviderAdaptersTest {
                                     && body.contains("\"model\":\"MiniMax-M2\"");
                     send(exchange, valid ? 200 : 400, valid ? "{\"choices\":[]}" : "{}");
                 });
-        MiniMaxProviderAdapter adapter = new MiniMaxProviderAdapter(http, baseUrl + "/minimax");
+        ProviderDestinationPolicy minimaxPolicy =
+                new ProviderDestinationPolicy("127.0.0.1", "127.0.0.1");
+        MiniMaxProviderAdapter adapter = new MiniMaxProviderAdapter(http, minimaxPolicy);
         ProviderClientConfiguration configuration =
-                new ProviderClientConfiguration(null, null, null, null, null, "MiniMax-M2");
+                new ProviderClientConfiguration(
+                        baseUrl + "/minimax", null, null, null, null, "MiniMax-M2");
 
         assertThat(
                         adapter.testConnection(configuration, "minimax-test-key".toCharArray())
@@ -162,23 +165,30 @@ class ProviderAdaptersTest {
     }
 
     @Test
-    void compatibleAndOllamaAdaptersUseOnlyAllowlistedDestinations() {
+    void compatibleOllamaAndMiniMaxAdaptersUseOnlyAllowlistedDestinations() {
         server.createContext(
                 "/compatible/models",
                 exchange -> send(exchange, 200, "{\"data\":[{\"id\":\"compatible-a\"}]}"));
         server.createContext(
                 "/ollama/api/tags",
                 exchange -> send(exchange, 200, "{\"models\":[{\"model\":\"llama-test\"}]}"));
+        server.createContext(
+                "/minimax-custom/chat/completions",
+                exchange -> send(exchange, 200, "{\"choices\":[]}"));
         ProviderDestinationPolicy policy = new ProviderDestinationPolicy("127.0.0.1", "127.0.0.1");
         OpenAiCompatibleProviderAdapter compatible =
                 new OpenAiCompatibleProviderAdapter(http, policy);
         OllamaProviderAdapter ollama = new OllamaProviderAdapter(http, policy);
+        MiniMaxProviderAdapter miniMax = new MiniMaxProviderAdapter(http, policy);
 
         ProviderClientConfiguration compatibleConfiguration =
                 new ProviderClientConfiguration(
                         baseUrl + "/compatible", null, "/models", null, null, null);
         ProviderClientConfiguration ollamaConfiguration =
                 new ProviderClientConfiguration(baseUrl + "/ollama", null, null, null, null, null);
+        ProviderClientConfiguration miniMaxConfiguration =
+                new ProviderClientConfiguration(
+                        baseUrl + "/minimax-custom", null, null, null, null, "MiniMax-M2");
 
         assertThat(compatible.discoverModels(compatibleConfiguration, "key".toCharArray()))
                 .extracting(model -> model.modelId())
@@ -186,6 +196,8 @@ class ProviderAdaptersTest {
         assertThat(ollama.discoverModels(ollamaConfiguration, new char[0]))
                 .extracting(model -> model.modelId())
                 .containsExactly("llama-test");
+        assertThat(miniMax.testConnection(miniMaxConfiguration, "key".toCharArray()).success())
+                .isTrue();
     }
 
     @Test
@@ -346,9 +358,10 @@ class ProviderAdaptersTest {
                         "key".toCharArray(),
                         request)
                 .subscribe(bytePlus);
-        new MiniMaxProviderAdapter(http, baseUrl + "/minimax")
+        new MiniMaxProviderAdapter(http, policy)
                 .streamChat(
-                        new ProviderClientConfiguration(null, null, null, null, null, "model-test"),
+                        new ProviderClientConfiguration(
+                                baseUrl + "/minimax", null, null, null, null, "model-test"),
                         "key".toCharArray(),
                         request)
                 .subscribe(miniMax);

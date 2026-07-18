@@ -102,10 +102,10 @@
                   <input
                     matInput
                     formControlName="baseUrl"
-                    placeholder="http://ollama:11434"
+                    [placeholder]="baseUrlPlaceholder(form.controls.providerType.value)"
                     autocomplete="url"
                   />
-                  <mat-hint>El host debe estar autorizado por el operador.</mat-hint>
+                  <mat-hint>{{ baseUrlHint(form.controls.providerType.value) }}</mat-hint>
                 </mat-form-field>
               }
 

@@ -106,8 +106,11 @@ PROVIDER_ALLOWED_HTTP_HOSTS=ollama
 
 Con allowlist vacía se bloquean todos los destinos configurables. BytePlus admite actualmente la
 region oficial documentada `ap-southeast-1` y requiere un model ID o endpoint ID configurado.
-MiniMax usa el host fijo `api.minimax.io` (sin allowlist, igual que OpenAI/Anthropic) y también
-requiere un model ID configurado, ya que no publica un catálogo de modelos.
+MiniMax usa por defecto `https://api.minimax.io/v1` (sin allowlist, igual que OpenAI/Anthropic) y
+también requiere un model ID configurado, ya que no publica un catálogo de modelos. Opcionalmente
+se puede indicar un Base URL propio (p. ej. el endpoint regional de China `api.minimaxi.com`), que
+en ese caso sí debe estar en `PROVIDER_ALLOWED_HOSTS`/`PROVIDER_ALLOWED_HTTP_HOSTS`, igual que
+OpenAI-compatible y Ollama.
 
 Para detener el entorno sin borrar datos:
 

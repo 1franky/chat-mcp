@@ -412,6 +412,8 @@ public final class ProviderManagementService implements ProviderManagementUseCas
         String baseUrl = optional(command.baseUrl(), 2_048);
         if (type.requiresConfigurableBaseUrl()) {
             validateBaseUrl(baseUrl);
+        } else if (type.allowsOptionalBaseUrl()) {
+            validateOptionalBaseUrl(baseUrl);
         } else if (baseUrl != null) {
             throw new IllegalArgumentException("Base URL is fixed for this provider");
         }
@@ -657,6 +659,13 @@ public final class ProviderManagementService implements ProviderManagementUseCas
     private void validateBaseUrl(String baseUrl) {
         if (baseUrl == null) {
             throw new IllegalArgumentException("baseUrl is required");
+        }
+        validateOptionalBaseUrl(baseUrl);
+    }
+
+    private void validateOptionalBaseUrl(String baseUrl) {
+        if (baseUrl == null) {
+            return;
         }
         URI uri;
         try {

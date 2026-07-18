@@ -273,8 +273,9 @@ public class ApplicationBeansConfiguration {
     }
 
     @Bean
-    MiniMaxProviderAdapter miniMaxProviderAdapter(ProviderHttpClient http) {
-        return new MiniMaxProviderAdapter(http);
+    MiniMaxProviderAdapter miniMaxProviderAdapter(
+            ProviderHttpClient http, ProviderDestinationPolicy destinationPolicy) {
+        return new MiniMaxProviderAdapter(http, destinationPolicy);
     }
 
     @Bean
