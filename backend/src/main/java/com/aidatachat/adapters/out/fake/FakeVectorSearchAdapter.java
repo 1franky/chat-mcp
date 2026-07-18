@@ -13,6 +13,19 @@ public final class FakeVectorSearchAdapter implements VectorSearchPort {
     private final ConcurrentHashMap<UUID, Entry> chunks = new ConcurrentHashMap<>();
 
     @Override
+    public void replaceChunks(UUID ownerId, UUID documentId, List<ChunkRecord> chunks) {
+        this.chunks
+                .entrySet()
+                .removeIf(
+                        entry ->
+                                entry.getValue().ownerId().equals(ownerId)
+                                        && entry.getValue().documentId().equals(documentId));
+        for (ChunkRecord chunk : chunks) {
+            this.chunks.put(chunk.chunkId(), new Entry(ownerId, documentId, chunk.embedding()));
+        }
+    }
+
+    @Override
     public void index(UUID ownerId, UUID documentId, List<VectorRecord> vectors) {
         for (VectorRecord vector : vectors) {
             chunks.put(vector.chunkId(), new Entry(ownerId, documentId, vector.embedding()));

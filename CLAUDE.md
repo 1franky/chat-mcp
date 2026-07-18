@@ -13,12 +13,15 @@ deterministic test doubles for LLM/MCP integrations. The full spec lives in
 connections, persistent chat with streaming/cancellation, a real MCP Streamable HTTP client, and
 backend-orchestrated tool calling for OpenAI and Anthropic only. **Sprint 5 (RAG) work beyond what
 the project owner has explicitly approved must not be started** — see `TASKS.md` for exactly which
-Sprint 5 pieces are approved and landed so far (as of 2026-07-17: the `rag` Flyway schema,
+Sprint 5 pieces are approved and landed so far (as of 2026-07-18: the `rag` Flyway schema,
 `EmbeddingProviderPort`, real+fake adapters for `DocumentRepository`/`DocumentStoragePort`/
-`VectorSearchPort`, and the `POST /api/documents` upload endpoint with its protections — size limit,
+`VectorSearchPort`, the `POST /api/documents` upload endpoint with its protections — size limit,
 real-MIME detection via Tika, ZIP-bomb guard, UUID storage names, SHA-256 idempotency, owner
-isolation; a document lands in `UPLOADED` and nothing processes it further yet; extraction,
-chunking, embeddings, retrieval, citations and the `/knowledge` UI are still unapproved).
+isolation — and extraction/normalization/chunking: a background pipeline
+(`DocumentProcessingUseCase`, PDFBox/POI-based extraction, `TextChunker`, batched embeddings against
+the fake provider) that takes an uploaded document from `UPLOADED` through `PROCESSING` to
+`READY`/`FAILED`, populating `rag.document_chunk` for real. Retrieval, citations, document
+selection in chat, and the `/knowledge` UI are still unapproved).
 
 ## Commands
 
@@ -96,11 +99,12 @@ configuration → wires application.service to concrete adapters
 - Flyway is the sole schema authority (`ddl-auto=validate`); migrations live in
   `backend/src/main/resources/db/migration`. Schemas: `identity`, `audit`, provider tables, and
   `chat.conversation`/`chat.message`. The `rag` schema has `document`, `document_chunk`
-  (`vector(1536)` + HNSW index) and `message_document` (`V7`). `document` is fully wired end to end
-  (`DocumentManagementUseCase`/`DocumentController`, `POST /api/documents` and friends); the
-  `embedding` column of `document_chunk` is reachable via `VectorSearchPort` real+fake adapters but
-  still has no use case consuming it (no chunking/embeddings yet) — see `docs/rag.md` for exactly
-  what is and isn't approved.
+  (`vector(1536)` + HNSW index) and `message_document` (`V7`). Both `document` and `document_chunk`
+  are fully wired end to end: `POST /api/documents` (`DocumentManagementUseCase`/`DocumentController`)
+  leaves a document `UPLOADED`, then `DocumentProcessingUseCase` extracts/chunks/embeds it in the
+  background into `READY` with real `document_chunk` rows. `message_document` still has no use case
+  consuming it (retrieval/citations not approved) — see `docs/rag.md` for exactly what is and isn't
+  approved.
 - Adding or changing an integration (LLM provider, MCP transport, etc.) means adding an adapter
   behind the existing port — never reaching into `application`/`domain` from adapter code, and
   never adding a new external dependency directly into `application` or `domain`.

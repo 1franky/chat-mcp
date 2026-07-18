@@ -4,6 +4,17 @@ Todos los cambios relevantes del proyecto se documentan aquí. El formato sigue 
 
 ## [Unreleased]
 
+### Added — Sprint 5 RAG: extracción, normalización y chunking (2026-07-18)
+
+- Pipeline en background (`DocumentProcessingUseCase`/`DocumentProcessingService`) que lleva un documento de `UPLOADED` a `READY`, disparado tras cada upload nuevo sobre un `ExecutorService` propio, sin bloquear la respuesta HTTP.
+- Extracción real: `DocumentTextExtractionPort` + `DocumentTextExtractorAdapter` — PDF vía `org.apache.pdfbox:pdfbox` (por página), DOCX vía `org.apache.poi:poi-ooxml`, Markdown troceado por encabezados, TXT/CSV/JSON con decodificación UTF-8 estricta. Límites de páginas/caracteres exigidos dentro del propio adaptador, lo antes posible.
+- Chunking: `TextChunker` (normalización que preserva párrafos, fusión de párrafos pequeños, sub-troceo con solapamiento solo donde hace falta, nunca cruza límite de página).
+- `VectorSearchPort` gana `replaceChunks` (delete+insert transaccional, idempotente) para la escritura inicial de contenido+embedding; nuevo dominio `DocumentChunk`.
+- `FakeEmbeddingProviderAdapter` pasa a estar siempre activo (ya no condicional a `app.integrations.mode=fake`): no existe adaptador real de embeddings todavía.
+- Fallos con `failureReason` específico (`extraction_timeout`, `too_many_pages`, `content_too_large`, `too_many_chunks`, `unsupported_text_encoding`, `no_extractable_text`, `embedding_failed`, `processing_failed`), nunca stack trace ni contenido del documento. Guarda de existencia antes de cada guardado final para no resucitar un documento borrado durante el procesamiento.
+- Sin caso de uso ni endpoint todavía para retrieval/citas — sigue sin aprobar, resto del sprint documentado en `TASKS.md`/`docs/rag.md`.
+- 46 tests nuevos/ampliados (unitarios + integración contra Postgres real). `./mvnw verify` completo en verde (159/159).
+
 ### Added — Base URL configurable para MiniMax (2026-07-18)
 
 - `MiniMaxProviderAdapter` ahora acepta un `baseUrl` opcional por conexión (default `https://api.minimax.io/v1` si se omite), ya que MiniMax publica endpoints regionales distintos (p. ej. `api.minimaxi.com` en China). Un Base URL personalizado pasa por la misma `ProviderDestinationPolicy` (allowlist SSRF) que ya exigen OpenAI-compatible/Ollama.

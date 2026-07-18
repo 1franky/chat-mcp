@@ -1,5 +1,6 @@
 package com.aidatachat.configuration;
 
+import com.aidatachat.adapters.out.extraction.DocumentTextExtractorAdapter;
 import com.aidatachat.adapters.out.fake.FakeDocumentRepository;
 import com.aidatachat.adapters.out.fake.FakeDocumentStorageAdapter;
 import com.aidatachat.adapters.out.fake.FakeEmbeddingProviderAdapter;
@@ -31,6 +32,7 @@ import com.aidatachat.adapters.out.security.SpringSessionInvalidationAdapter;
 import com.aidatachat.adapters.out.storage.FilesystemDocumentStorageAdapter;
 import com.aidatachat.application.port.in.ChatUseCase;
 import com.aidatachat.application.port.in.DocumentManagementUseCase;
+import com.aidatachat.application.port.in.DocumentProcessingUseCase;
 import com.aidatachat.application.port.in.McpStatusUseCase;
 import com.aidatachat.application.port.in.SystemStatusUseCase;
 import com.aidatachat.application.port.out.AuditRepository;
@@ -39,6 +41,8 @@ import com.aidatachat.application.port.out.CredentialCipherPort;
 import com.aidatachat.application.port.out.DocumentMimeDetectionPort;
 import com.aidatachat.application.port.out.DocumentRepository;
 import com.aidatachat.application.port.out.DocumentStoragePort;
+import com.aidatachat.application.port.out.DocumentTextExtractionPort;
+import com.aidatachat.application.port.out.EmbeddingProviderPort;
 import com.aidatachat.application.port.out.IdentityTransactionPort;
 import com.aidatachat.application.port.out.LlmChatGateway;
 import com.aidatachat.application.port.out.LlmProviderPort;
@@ -47,8 +51,10 @@ import com.aidatachat.application.port.out.PasswordHashPort;
 import com.aidatachat.application.port.out.ProviderConnectionRepository;
 import com.aidatachat.application.port.out.SessionInvalidationPort;
 import com.aidatachat.application.port.out.UserAccountRepository;
+import com.aidatachat.application.port.out.VectorSearchPort;
 import com.aidatachat.application.service.ChatService;
 import com.aidatachat.application.service.DocumentManagementService;
+import com.aidatachat.application.service.DocumentProcessingService;
 import com.aidatachat.application.service.IdentityService;
 import com.aidatachat.application.service.McpStatusService;
 import com.aidatachat.application.service.ProviderManagementService;
@@ -88,11 +94,15 @@ public class ApplicationBeansConfiguration {
         return new FakeMcpGateway();
     }
 
+    /**
+     * Always active, regardless of {@code app.integrations.mode}: no real {@link
+     * com.aidatachat.application.port.out.EmbeddingProviderPort} adapter exists yet (not approved
+     * for this sprint), so there is nothing to toggle to under {@code mode=real} — same rationale
+     * as {@link #tikaDocumentMimeDetectionAdapter()}/{@link #documentTextExtractorAdapter}, except
+     * this one is a deliberate placeholder rather than an inherently-local implementation. See
+     * docs/rag.md for the temporary nature of this wiring.
+     */
     @Bean
-    @ConditionalOnProperty(
-            name = "app.integrations.mode",
-            havingValue = "fake",
-            matchIfMissing = true)
     FakeEmbeddingProviderAdapter fakeEmbeddingProviderAdapter() {
         return new FakeEmbeddingProviderAdapter();
     }
@@ -149,15 +159,70 @@ public class ApplicationBeansConfiguration {
     }
 
     @Bean
+    DocumentTextExtractorAdapter documentTextExtractorAdapter(
+            @Value("${app.rag.extraction.max-pages:200}") int maxPages,
+            @Value("${app.rag.extraction.max-characters:2000000}") long maxCharacters) {
+        return new DocumentTextExtractorAdapter(maxPages, maxCharacters);
+    }
+
+    @Bean(destroyMethod = "shutdown")
+    ExecutorService documentProcessingExecutor() {
+        return Executors.newCachedThreadPool(
+                Thread.ofPlatform().name("document-processing-", 0).daemon(true).factory());
+    }
+
+    @Bean
+    DocumentProcessingUseCase documentProcessingUseCase(
+            DocumentRepository documents,
+            DocumentStoragePort storage,
+            DocumentTextExtractionPort extraction,
+            EmbeddingProviderPort embeddingProvider,
+            VectorSearchPort vectorSearch,
+            AuditRepository audit,
+            Clock clock,
+            ExecutorService documentProcessingExecutor,
+            @Value("${app.rag.extraction.timeout-seconds:30}") long extractionTimeoutSeconds,
+            @Value("${app.rag.chunking.chunk-size-chars:1800}") int chunkSizeChars,
+            @Value("${app.rag.chunking.overlap-chars:200}") int overlapChars,
+            @Value("${app.rag.chunking.max-chunks-per-document:500}") int maxChunksPerDocument,
+            @Value("${app.rag.embedding.model-id:fake-embedding-v1}") String embeddingModelId,
+            @Value("${app.rag.embedding.batch-size:64}") int embeddingBatchSize) {
+        return new DocumentProcessingService(
+                documents,
+                storage,
+                extraction,
+                embeddingProvider,
+                vectorSearch,
+                audit,
+                clock,
+                documentProcessingExecutor,
+                extractionTimeoutSeconds,
+                chunkSizeChars,
+                overlapChars,
+                maxChunksPerDocument,
+                embeddingModelId,
+                embeddingBatchSize);
+    }
+
+    @Bean
     DocumentManagementUseCase documentManagementUseCase(
             DocumentRepository documents,
             DocumentStoragePort storage,
             DocumentMimeDetectionPort mimeDetection,
             AuditRepository audit,
             Clock clock,
-            @Value("${app.rag.upload.max-bytes:26214400}") long maxUploadBytes) {
+            @Value("${app.rag.upload.max-bytes:26214400}") long maxUploadBytes,
+            DocumentProcessingUseCase documentProcessingUseCase,
+            ExecutorService documentProcessingExecutor) {
         return new DocumentManagementService(
-                documents, storage, mimeDetection, audit, clock, maxUploadBytes);
+                documents,
+                storage,
+                mimeDetection,
+                audit,
+                clock,
+                maxUploadBytes,
+                documentProcessingUseCase,
+                documentProcessingExecutor);
     }
 
     @Bean
