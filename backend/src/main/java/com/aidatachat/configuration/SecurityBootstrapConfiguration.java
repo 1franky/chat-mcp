@@ -125,7 +125,8 @@ public class SecurityBootstrapConfiguration {
                                                 "/api/auth/logout",
                                                 "/api/providers/**",
                                                 "/api/conversations/**",
-                                                "/api/mcp/**")
+                                                "/api/mcp/**",
+                                                "/api/documents/**")
                                         .authenticated()
                                         .anyRequest()
                                         .denyAll())

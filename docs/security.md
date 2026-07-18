@@ -96,3 +96,26 @@ debe endurecerse antes de aceptar dominios controlados por terceros fuera de una
   Angular vuelve a sanitizar el resultado enlazado a `innerHTML`.
 - SSE es mismo-origen, exige sesion y CSRF, devuelve `Cache-Control: no-store`, heartbeats y cancela
   el proveedor ante desconexion. Nginx desactiva buffering para `/api`.
+
+## Documentos (RAG)
+
+- `POST /api/documents` exige sesion y CSRF, igual que el resto de escrituras autenticadas.
+- Tamano maximo configurable (`MAX_UPLOAD_BYTES`, 25 MiB por defecto) aplicado en dos capas: el
+  limite de multipart de Spring MVC y una lectura acotada (`readNBytes`) en el servicio que nunca
+  vuelca un stream sin limite a memoria.
+- El tipo de archivo se valida por MIME real (deteccion vía `Tika`, no el `Content-Type` declarado
+  por el cliente) cruzado contra la extension declarada; un binario disfrazado con una extension
+  permitida se rechaza porque su MIME detectado no coincide con ninguno de los permitidos para esa
+  extension.
+- El nombre de archivo original solo se persiste como metadata saneada (nunca se usa para resolver
+  rutas); el nombre fisico en disco es siempre un UUID generado por el servidor.
+- Los archivos `.docx` (unico formato basado en ZIP admitido) pasan por un guardia anti zip-bomb que
+  descomprime con un contador acumulado y aborta sobre 100 MB inflados o 2000 entradas, sin confiar
+  en el tamano declarado por el archivo.
+- El hash SHA-256 del contenido hace que volver a subir el mismo archivo para el mismo propietario
+  sea idempotente (devuelve el documento existente) en vez de duplicarlo.
+- Todas las operaciones sobre documentos filtran por `owner_id`; un documento de otro propietario
+  responde `404`, nunca `403`, para no filtrar su existencia.
+- Diferido a la futura extraccion de texto (todavia sin aprobar): proteccion XXE al parsear XML/
+  OOXML, limites de paginas/caracteres/chunks, timeout de extraccion. Antivirus sigue siendo
+  opcional segun la especificacion.

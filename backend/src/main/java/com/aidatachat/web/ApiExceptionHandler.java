@@ -2,6 +2,9 @@ package com.aidatachat.web;
 
 import com.aidatachat.application.exception.ChatConflictException;
 import com.aidatachat.application.exception.ConversationNotFoundException;
+import com.aidatachat.application.exception.DocumentNotFoundException;
+import com.aidatachat.application.exception.DocumentStorageException;
+import com.aidatachat.application.exception.DocumentTooLargeException;
 import com.aidatachat.application.exception.DuplicateUserException;
 import com.aidatachat.application.exception.InvalidCredentialsException;
 import com.aidatachat.application.exception.LastAdministratorException;
@@ -9,6 +12,7 @@ import com.aidatachat.application.exception.ProviderCommunicationException;
 import com.aidatachat.application.exception.ProviderConflictException;
 import com.aidatachat.application.exception.ProviderNotFoundException;
 import com.aidatachat.application.exception.RegistrationClosedException;
+import com.aidatachat.application.exception.UnsupportedDocumentTypeException;
 import com.aidatachat.application.exception.UserNotFoundException;
 import java.net.URI;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -19,6 +23,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -148,6 +153,42 @@ public class ApiExceptionHandler {
                 "concurrent-update",
                 "Conflicto de actualizacion",
                 "El usuario cambio mientras se procesaba la solicitud.");
+    }
+
+    @ExceptionHandler(DocumentNotFoundException.class)
+    ProblemDetail documentNotFound(DocumentNotFoundException exception) {
+        return problem(
+                HttpStatus.NOT_FOUND,
+                "document-not-found",
+                "Documento no encontrado",
+                "El documento solicitado no existe.");
+    }
+
+    @ExceptionHandler({DocumentTooLargeException.class, MaxUploadSizeExceededException.class})
+    ProblemDetail documentTooLarge(Exception exception) {
+        return problem(
+                HttpStatus.PAYLOAD_TOO_LARGE,
+                "document-too-large",
+                "Documento demasiado grande",
+                "El archivo excede el tamano maximo permitido.");
+    }
+
+    @ExceptionHandler(UnsupportedDocumentTypeException.class)
+    ProblemDetail unsupportedDocumentType(UnsupportedDocumentTypeException exception) {
+        return problem(
+                HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                "unsupported-document-type",
+                "Tipo de documento no soportado",
+                "El formato del archivo no esta permitido o no coincide con su extension.");
+    }
+
+    @ExceptionHandler(DocumentStorageException.class)
+    ProblemDetail documentStorageError(DocumentStorageException exception) {
+        return problem(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "document-storage-error",
+                "Error de almacenamiento",
+                "No fue posible almacenar o recuperar el documento.");
     }
 
     private ProblemDetail problem(HttpStatus status, String type, String title, String detail) {

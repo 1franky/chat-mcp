@@ -12,6 +12,7 @@ import com.aidatachat.adapters.out.mcp.McpHttpClient;
 import com.aidatachat.adapters.out.mcp.McpSessionManager;
 import com.aidatachat.adapters.out.mcp.NoOpMcpAuthProvider;
 import com.aidatachat.adapters.out.mcp.RealMcpGateway;
+import com.aidatachat.adapters.out.mime.TikaDocumentMimeDetectionAdapter;
 import com.aidatachat.adapters.out.persistence.rag.DocumentJpaAdapter;
 import com.aidatachat.adapters.out.persistence.rag.PgVectorSearchAdapter;
 import com.aidatachat.adapters.out.persistence.rag.SpringDataDocumentRepository;
@@ -29,11 +30,15 @@ import com.aidatachat.adapters.out.security.Argon2PasswordHashAdapter;
 import com.aidatachat.adapters.out.security.SpringSessionInvalidationAdapter;
 import com.aidatachat.adapters.out.storage.FilesystemDocumentStorageAdapter;
 import com.aidatachat.application.port.in.ChatUseCase;
+import com.aidatachat.application.port.in.DocumentManagementUseCase;
 import com.aidatachat.application.port.in.McpStatusUseCase;
 import com.aidatachat.application.port.in.SystemStatusUseCase;
 import com.aidatachat.application.port.out.AuditRepository;
 import com.aidatachat.application.port.out.ConversationRepository;
 import com.aidatachat.application.port.out.CredentialCipherPort;
+import com.aidatachat.application.port.out.DocumentMimeDetectionPort;
+import com.aidatachat.application.port.out.DocumentRepository;
+import com.aidatachat.application.port.out.DocumentStoragePort;
 import com.aidatachat.application.port.out.IdentityTransactionPort;
 import com.aidatachat.application.port.out.LlmChatGateway;
 import com.aidatachat.application.port.out.LlmProviderPort;
@@ -43,6 +48,7 @@ import com.aidatachat.application.port.out.ProviderConnectionRepository;
 import com.aidatachat.application.port.out.SessionInvalidationPort;
 import com.aidatachat.application.port.out.UserAccountRepository;
 import com.aidatachat.application.service.ChatService;
+import com.aidatachat.application.service.DocumentManagementService;
 import com.aidatachat.application.service.IdentityService;
 import com.aidatachat.application.service.McpStatusService;
 import com.aidatachat.application.service.ProviderManagementService;
@@ -135,6 +141,23 @@ public class ApplicationBeansConfiguration {
     @ConditionalOnProperty(name = "app.integrations.mode", havingValue = "real")
     PgVectorSearchAdapter pgVectorSearchAdapter(JdbcTemplate jdbcTemplate) {
         return new PgVectorSearchAdapter(jdbcTemplate);
+    }
+
+    @Bean
+    TikaDocumentMimeDetectionAdapter tikaDocumentMimeDetectionAdapter() {
+        return new TikaDocumentMimeDetectionAdapter();
+    }
+
+    @Bean
+    DocumentManagementUseCase documentManagementUseCase(
+            DocumentRepository documents,
+            DocumentStoragePort storage,
+            DocumentMimeDetectionPort mimeDetection,
+            AuditRepository audit,
+            Clock clock,
+            @Value("${app.rag.upload.max-bytes:26214400}") long maxUploadBytes) {
+        return new DocumentManagementService(
+                documents, storage, mimeDetection, audit, clock, maxUploadBytes);
     }
 
     @Bean
