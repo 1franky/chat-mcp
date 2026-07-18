@@ -276,7 +276,7 @@ select {
   background: var(--brand);
   color: white;
   font-size: 0.68rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .message[data-role='USER'] .message__avatar {
@@ -325,7 +325,7 @@ select {
   background: var(--badge-neutral);
   color: var(--text-secondary);
   font-size: 0.66rem;
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .tool-call-badge[data-state='COMPLETED'] {
@@ -432,7 +432,7 @@ select {
   background: var(--badge-neutral);
   color: var(--text-secondary);
   font-size: 0.66rem;
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .mcp-state {
@@ -489,7 +489,7 @@ select {
   border-radius: 1.15rem;
   background: var(--brand);
   color: white;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .empty-chat h2 {
@@ -553,9 +553,14 @@ select {
   margin: 0 auto;
   padding: 0.55rem;
   border: 1px solid var(--border-strong);
-  border-radius: 1rem;
+  border-radius: 1.1rem;
   background: var(--surface-input);
-  box-shadow: 0 8px 30px var(--shadow-soft);
+  box-shadow: 0 2px 12px var(--shadow-soft);
+  transition: border-color 150ms ease;
+}
+
+.composer-box:focus-within {
+  border-color: var(--brand-muted);
 }
 
 .composer-box textarea {

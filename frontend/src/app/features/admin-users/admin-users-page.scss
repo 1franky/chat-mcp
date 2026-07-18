@@ -14,10 +14,11 @@
 }
 
 .heading h1 {
-  margin: 0.3rem 0 0.7rem;
-  font-size: clamp(2.3rem, 5vw, 4rem);
-  letter-spacing: -0.045em;
-  line-height: 1;
+  margin: 0.4rem 0 0.7rem;
+  font-size: clamp(1.9rem, 3.5vw, 2.8rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
 }
 
 .heading p:not(.eyebrow) {
@@ -28,7 +29,7 @@
 .eyebrow {
   color: var(--brand-muted);
   font-size: 0.76rem;
-  font-weight: 750;
+  font-weight: 600;
   letter-spacing: 0.14em;
 }
 
@@ -102,7 +103,7 @@ td:first-child span {
   background: var(--info-surface);
   color: var(--info-text);
   font-size: 0.72rem;
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .actions {
