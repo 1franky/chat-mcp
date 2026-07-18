@@ -4,6 +4,14 @@ Todos los cambios relevantes del proyecto se documentan aquí. El formato sigue 
 
 ## [Unreleased]
 
+### Added — Sprint 5 RAG: endpoint de subida `POST /api/documents` (2026-07-17)
+
+- `DocumentManagementUseCase`/`DocumentManagementService`: sube un documento validando tamaño máximo (`MAX_UPLOAD_BYTES`, ahora sí cableado a `spring.servlet.multipart.*`/`app.rag.upload.max-bytes`), MIME real cruzado contra la extensión declarada, protección ZIP-bomb para `.docx`, hash SHA-256 para idempotencia (`DocumentRepository.findByOwnerIdAndContentHash`, nuevo método), y aislamiento estricto por `owner_id`. El documento queda en `UPLOADED`.
+- Nuevo port `DocumentMimeDetectionPort` con adaptador `TikaDocumentMimeDetectionAdapter` (`org.apache.tika:tika-core`).
+- Endpoints `POST/GET /api/documents`, `GET /api/documents/{id}`, `DELETE /api/documents/{id}` (`DocumentController`), con 5 nuevos `@ExceptionHandler` en `ApiExceptionHandler` (404/413/415/500).
+- Diferido explícitamente (documentado en `docs/rag.md`): protección XXE y límites de extracción (tareas de la futura extracción de texto), antivirus, endpoint de descarga.
+- 24 tests nuevos (13 unitarios del servicio incluyendo zip-bomb, 5 del adaptador Tika, 4 de integración HTTP end-to-end, 2 de idempotencia por hash). `./mvnw verify` completo en verde (113/113).
+
 ### Added — Sprint 5 RAG: DocumentRepository/DocumentStoragePort/VectorSearchPort (2026-07-17)
 
 - `DocumentRepository` ampliado (find/save/delete/paginación con filtro de estado) con adaptador JPA real `DocumentJpaAdapter` sobre `rag.document` y fake en memoria.

@@ -48,6 +48,18 @@ class FakeDocumentRepositoryTest {
     }
 
     @Test
+    void findsByOwnerAndContentHashForIdempotencyAndIsolatesByOwner() {
+        Document document = document(UUID.randomUUID(), owner, DocumentStatus.UPLOADED, 1);
+        repository.save(document);
+
+        assertThat(repository.findByOwnerIdAndContentHash(owner, document.contentHash()))
+                .contains(document);
+        assertThat(repository.findByOwnerIdAndContentHash(otherOwner, document.contentHash()))
+                .isEmpty();
+        assertThat(repository.findByOwnerIdAndContentHash(owner, "b".repeat(64))).isEmpty();
+    }
+
+    @Test
     void filtersAndPaginatesByOwnerAndStatus() {
         repository.save(document(UUID.randomUUID(), owner, DocumentStatus.READY, 1));
         repository.save(document(UUID.randomUUID(), owner, DocumentStatus.READY, 2));

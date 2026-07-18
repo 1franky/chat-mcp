@@ -12,6 +12,8 @@ public interface SpringDataDocumentRepository extends JpaRepository<DocumentEnti
 
     Optional<DocumentEntity> findByIdAndOwnerId(UUID id, UUID ownerId);
 
+    Optional<DocumentEntity> findByOwnerIdAndContentHash(UUID ownerId, String contentHash);
+
     boolean existsByIdAndOwnerId(UUID id, UUID ownerId);
 
     @Query(

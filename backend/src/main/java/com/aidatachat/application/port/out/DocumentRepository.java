@@ -12,6 +12,8 @@ public interface DocumentRepository {
 
     Optional<Document> findByIdAndOwnerId(UUID documentId, UUID ownerId);
 
+    Optional<Document> findByOwnerIdAndContentHash(UUID ownerId, String contentHash);
+
     DocumentPage findAllByOwnerId(UUID ownerId, DocumentStatus statusFilter, int page, int size);
 
     Document save(Document document);

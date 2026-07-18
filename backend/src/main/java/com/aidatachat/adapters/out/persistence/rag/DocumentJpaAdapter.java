@@ -32,6 +32,14 @@ public class DocumentJpaAdapter implements DocumentRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<Document> findByOwnerIdAndContentHash(UUID ownerId, String contentHash) {
+        return documents
+                .findByOwnerIdAndContentHash(ownerId, contentHash)
+                .map(DocumentEntity::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public DocumentPage findAllByOwnerId(
             UUID ownerId, DocumentStatus statusFilter, int page, int size) {
         Page<DocumentEntity> result =

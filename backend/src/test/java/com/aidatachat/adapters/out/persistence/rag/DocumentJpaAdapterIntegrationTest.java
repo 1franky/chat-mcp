@@ -124,6 +124,19 @@ class DocumentJpaAdapterIntegrationTest {
     }
 
     @Test
+    void findsByOwnerAndContentHashForIdempotencyAndIsolatesByOwner() {
+        String hash = "d".repeat(64);
+        Document document = document(UUID.randomUUID(), ownerId, hash);
+        documents.save(document);
+
+        assertThat(documents.findByOwnerIdAndContentHash(ownerId, hash))
+                .map(Document::id)
+                .contains(document.id());
+        assertThat(documents.findByOwnerIdAndContentHash(otherOwnerId, hash)).isEmpty();
+        assertThat(documents.findByOwnerIdAndContentHash(ownerId, "e".repeat(64))).isEmpty();
+    }
+
+    @Test
     void filtersAndPaginatesDocumentsByOwnerAndStatus() {
         documents.save(readyDocument(UUID.randomUUID(), ownerId, "d".repeat(64)));
         documents.save(readyDocument(UUID.randomUUID(), ownerId, "e".repeat(64)));

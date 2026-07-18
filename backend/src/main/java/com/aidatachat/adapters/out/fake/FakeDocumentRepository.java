@@ -25,6 +25,14 @@ public final class FakeDocumentRepository implements DocumentRepository {
     }
 
     @Override
+    public Optional<Document> findByOwnerIdAndContentHash(UUID ownerId, String contentHash) {
+        return documents.values().stream()
+                .filter(document -> document.ownerId().equals(ownerId))
+                .filter(document -> document.contentHash().equals(contentHash))
+                .findFirst();
+    }
+
+    @Override
     public DocumentPage findAllByOwnerId(
             UUID ownerId, DocumentStatus statusFilter, int page, int size) {
         List<Document> matches =
