@@ -5,6 +5,7 @@ export interface Conversation {
   title: string;
   providerConnectionId: string | null;
   modelId: string;
+  selectedDocumentIds: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -33,6 +34,16 @@ export interface ToolCallView {
   errorCode: string | null;
 }
 
+export interface CitationView {
+  documentId: string;
+  documentName: string;
+  chunkId: string;
+  pageNumber: number | null;
+  sectionLabel: string | null;
+  snippet: string;
+  score: number;
+}
+
 export interface ConversationMessage {
   id: string;
   conversationId: string;
@@ -51,6 +62,7 @@ export interface ConversationMessage {
   createdAt: string;
   updatedAt: string;
   toolCalls: ToolCallView[];
+  citations: CitationView[];
 }
 
 export interface CreateConversationRequest {

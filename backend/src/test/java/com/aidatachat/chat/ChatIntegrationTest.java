@@ -22,13 +22,8 @@ import com.aidatachat.application.port.in.IdentityUseCase.RegisterCommand;
 import com.aidatachat.application.port.in.ProviderManagementUseCase;
 import com.aidatachat.application.port.in.ProviderManagementUseCase.SaveProviderCommand;
 import com.aidatachat.application.port.out.ConversationRepository;
-import com.aidatachat.application.port.out.DocumentRepository;
 import com.aidatachat.application.port.out.EmbeddingProviderPort;
-import com.aidatachat.application.port.out.VectorSearchPort;
-import com.aidatachat.application.port.out.VectorSearchPort.ChunkRecord;
 import com.aidatachat.domain.model.ConversationToolCall;
-import com.aidatachat.domain.model.Document;
-import com.aidatachat.domain.model.DocumentStatus;
 import com.aidatachat.domain.model.MessageDocumentRelation;
 import com.aidatachat.domain.model.MessageStatus;
 import com.aidatachat.domain.model.MessageToolCallStatus;
@@ -42,8 +37,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -79,8 +72,6 @@ class ChatIntegrationTest {
     @Autowired private ProviderManagementUseCase providers;
     @Autowired private ChatUseCase chat;
     @Autowired private ConversationRepository conversations;
-    @Autowired private DocumentRepository documents;
-    @Autowired private VectorSearchPort vectorSearch;
     @Autowired private EmbeddingProviderPort embeddingProvider;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private WebApplicationContext webApplicationContext;
@@ -149,47 +140,16 @@ class ChatIntegrationTest {
         UUID documentId = UUID.randomUUID();
         UUID chunkId = UUID.randomUUID();
         String queryText = "pregunta sobre el informe";
-        // rag.document/rag.document_chunk are seeded directly over JDBC (real Postgres, needed to
-        // satisfy the chat.conversation_document/rag.message_document foreign keys) while
-        // DocumentRepository/VectorSearchPort stay on their default in-memory fakes — mirrors how
-        // this test already drives ChatUseCase against a real LlmChatGateway fake connection.
+        // rag.document/rag.document_chunk are seeded directly over JDBC (real Postgres) — this test
+        // exercises DocumentRepository/VectorSearchPort through the same real adapters the running
+        // app uses, since document/vector persistence is always-real (no paid dependency to fake).
         insertDocument(documentId, owner.id());
-        insertChunk(chunkId, documentId, owner.id());
-        documents.save(
-                new Document(
-                        documentId,
-                        owner.id(),
-                        "informe.pdf",
-                        "storage-key",
-                        "application/pdf",
-                        1024,
-                        "a".repeat(64),
-                        DocumentStatus.READY,
-                        null,
-                        FakeEmbeddingProviderAdapter.MODEL_ID,
-                        FakeEmbeddingProviderAdapter.DIMENSION,
-                        1,
-                        0,
-                        Instant.now(),
-                        Instant.now()));
         float[] matchingVector =
                 embeddingProvider
                         .embed(FakeEmbeddingProviderAdapter.MODEL_ID, List.of(queryText))
                         .vectors()
                         .getFirst();
-        vectorSearch.replaceChunks(
-                owner.id(),
-                documentId,
-                List.of(
-                        new ChunkRecord(
-                                chunkId,
-                                0,
-                                "contenido citado del informe",
-                                4,
-                                null,
-                                FakeEmbeddingProviderAdapter.MODEL_ID,
-                                matchingVector,
-                                Instant.now())));
+        insertChunk(chunkId, documentId, owner.id(), matchingVector);
 
         ChatUseCase.ConversationView selected =
                 chat.selectDocuments(
@@ -231,7 +191,7 @@ class ChatIntegrationTest {
         UUID documentId = UUID.randomUUID();
         UUID chunkId = UUID.randomUUID();
         insertDocument(documentId, owner.id());
-        insertChunk(chunkId, documentId, owner.id());
+        insertChunk(chunkId, documentId, owner.id(), new float[1536]);
         ConversationRepository.GenerationMessages generation =
                 conversations.createGeneration(
                         conversation.id(),
@@ -429,7 +389,7 @@ class ChatIntegrationTest {
                 "a".repeat(64));
     }
 
-    private void insertChunk(UUID id, UUID documentId, UUID ownerId) {
+    private void insertChunk(UUID id, UUID documentId, UUID ownerId, float[] vector) {
         jdbc.update(
                 """
                 INSERT INTO rag.document_chunk
@@ -441,9 +401,18 @@ class ChatIntegrationTest {
                 id,
                 documentId,
                 ownerId,
-                IntStream.range(0, 1536)
-                        .mapToObj(i -> "0")
-                        .collect(Collectors.joining(",", "[", "]")));
+                vectorLiteral(vector));
+    }
+
+    private static String vectorLiteral(float[] vector) {
+        StringBuilder builder = new StringBuilder("[");
+        for (int i = 0; i < vector.length; i++) {
+            if (i > 0) {
+                builder.append(',');
+            }
+            builder.append(vector[i]);
+        }
+        return builder.append(']').toString();
     }
 
     private ProviderSelection fakeProvider(UserAccount owner) {

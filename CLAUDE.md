@@ -9,22 +9,23 @@ AI Data Chat: a data-oriented AI chat application. This is a monorepo with a Spr
 deterministic test doubles for LLM/MCP integrations. The full spec lives in
 `AI_DATA_CHAT_PROMPT.md`; roadmap status lives in `TASKS.md`.
 
-**Current scope (through Sprint 4):** infrastructure, identity, users, encrypted LLM provider
-connections, persistent chat with streaming/cancellation, a real MCP Streamable HTTP client, and
-backend-orchestrated tool calling for OpenAI and Anthropic only. **Sprint 5 (RAG) work beyond what
-the project owner has explicitly approved must not be started** — see `TASKS.md` for exactly which
-Sprint 5 pieces are approved and landed so far (as of 2026-07-18: the `rag` Flyway schema,
-`EmbeddingProviderPort`, real+fake adapters for `DocumentRepository`/`DocumentStoragePort`/
-`VectorSearchPort`, the `POST /api/documents` upload endpoint with its protections — size limit,
-real-MIME detection via Tika, ZIP-bomb guard, UUID storage names, SHA-256 idempotency, owner
-isolation — extraction/normalization/chunking: a background pipeline (`DocumentProcessingUseCase`,
-PDFBox/POI-based extraction, `TextChunker`, batched embeddings against the fake provider) that takes
-an uploaded document from `UPLOADED` through `PROCESSING` to `READY`/`FAILED`, populating
-`rag.document_chunk` for real — and retrieval + citations (**backend only**, as of 2026-07-18):
-opt-in per-conversation document selection (`ChatUseCase.selectDocuments`, `chat.conversation_document`),
-`RagRetrievalUseCase` scoping search to selected `READY` documents, and citations persisted per
-assistant message in `rag.message_document`. The document selector in the chat composer and the
-`/knowledge` UI are still unapproved/unbuilt — no frontend for documents exists yet).
+**Current scope (through Sprint 5):** infrastructure, identity, users, encrypted LLM provider
+connections, persistent chat with streaming/cancellation, a real MCP Streamable HTTP client,
+backend-orchestrated tool calling for OpenAI and Anthropic only, and RAG (approved and landed
+2026-07-17 through 2026-07-19 — see `TASKS.md`/`docs/rag.md` for the full history): the `rag` Flyway
+schema, `EmbeddingProviderPort`, real (always-active, see `docs/rag.md` "Bug corregido: documentos
+siempre reales") adapters for `DocumentRepository`/`DocumentStoragePort`/`VectorSearchPort`, the
+`POST /api/documents` upload endpoint with its protections — size limit, real-MIME detection via
+Tika, ZIP-bomb guard, UUID storage names, SHA-256 idempotency, owner isolation — a background
+extraction/normalization/chunking pipeline (`DocumentProcessingUseCase`, PDFBox/POI-based extraction,
+`TextChunker`, batched embeddings against the fake embedding provider) taking an uploaded document
+from `UPLOADED` through `PROCESSING` to `READY`/`FAILED` and populating `rag.document_chunk`,
+opt-in per-conversation retrieval (`ChatUseCase.selectDocuments`, `chat.conversation_document`,
+`RagRetrievalUseCase`) with citations persisted per assistant message in `rag.message_document`, and
+the frontend: a document management panel at `/settings/documents` (upload, status polling, delete)
+and, in `/chat`, a per-conversation document selector in the composer plus citation cards under
+grounded responses. **Sprint 6+ work beyond what the project owner has explicitly approved must not
+be started.**
 
 ## Commands
 

@@ -9,7 +9,9 @@ un cliente MCP Streamable HTTP real, con orquestacion de rondas en el backend �
 `docs/mcp-integration.md` y ADR-0009. Desde 2026-07-18 (Sprint 5), una conversacion puede seleccionar
 documentos propios (`PUT .../documents`) para retrieval RAG opt-in: sin seleccion, el chat funciona
 igual que antes; con seleccion, cada mensaje recupera chunks relevantes y la respuesta persiste citas
-— ver `docs/rag.md`. Todavia sin UI (selector en el composer, panel `/knowledge`).
+— ver `docs/rag.md`. Desde 2026-07-19 el composer incluye un panel de seleccion de documentos y las
+respuestas fundamentadas muestran tarjetas de cita; la gestion de documentos (subir/listar/eliminar)
+vive en `/settings/documents`.
 
 La UI muestra el modo activo (`FAKE`/`real`) y el estado del MCP (`UP`/`DEGRADED`/`DOWN`) enlazando
 al panel de solo lectura en `/settings/mcp`.
@@ -78,3 +80,10 @@ tool call con su estado (pendiente/ejecutando/completado/error/bloqueado/tiempo 
 envia y Shift+Enter crea una linea. El tema oscuro se alterna desde la barra superior; sólo la
 preferencia `light`/`dark` se guarda en `localStorage`. El badge de MCP enlaza al panel de solo
 lectura `/settings/mcp`.
+
+Un panel plegable en el composer permite seleccionar documentos propios `READY` como contexto para la
+conversacion activa (solo visible con una conversacion ya creada — una conversacion nueva sin guardar
+no tiene donde persistir la seleccion todavia), con un enlace a `/settings/documents` para gestionar
+documentos. Las respuestas fundamentadas en documentos seleccionados muestran tarjetas de cita
+(documento, pagina/seccion, fragmento) despues del Markdown de la respuesta. Como las citas no viajan
+por SSE, el frontend recarga los mensajes de la conversacion al completar o cancelar una generacion.
