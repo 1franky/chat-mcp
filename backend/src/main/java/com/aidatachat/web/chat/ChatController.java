@@ -109,6 +109,19 @@ public class ChatController {
                 request.getRemoteAddr());
     }
 
+    @PutMapping("/{conversationId}/documents")
+    ConversationView selectDocuments(
+            Authentication authentication,
+            @PathVariable UUID conversationId,
+            @Valid @RequestBody SelectDocumentsRequest body,
+            HttpServletRequest request) {
+        return chat.selectDocuments(
+                ownerId(authentication),
+                conversationId,
+                body.documentIds(),
+                request.getRemoteAddr());
+    }
+
     @DeleteMapping("/{conversationId}")
     ResponseEntity<Void> delete(
             Authentication authentication,
@@ -205,6 +218,8 @@ public class ChatController {
 
     public record SelectModelRequest(
             @NotNull UUID providerConnectionId, @NotBlank @Size(max = 255) String modelId) {}
+
+    public record SelectDocumentsRequest(@NotNull List<UUID> documentIds) {}
 
     public record SendMessageRequest(@NotBlank @Size(max = 32000) String content) {}
 

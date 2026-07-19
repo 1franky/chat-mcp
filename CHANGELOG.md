@@ -4,6 +4,17 @@ Todos los cambios relevantes del proyecto se documentan aquí. El formato sigue 
 
 ## [Unreleased]
 
+### Added — Sprint 5 RAG: retrieval y citas, solo backend (2026-07-18)
+
+- Retrieval **opt-in por conversación**: `ChatUseCase.selectDocuments`/`PUT /api/conversations/{id}/documents` (tabla-hija `chat.conversation_document`, `V8`). Sin selección, cero latencia extra y cero llamadas a embeddings — comportamiento del chat idéntico al de antes de esta tarea.
+- Nuevo `RagRetrievalUseCase`/`RagRetrievalService`: valida ownership+`READY` de los documentos seleccionados (ignora en silencio el resto), busca top-k acotado a esos documentos, filtra por umbral de score configurable.
+- `VectorSearchPort.search` gana un filtro por `documentIds` (antes buscaba sobre todos los chunks del owner — corregido antes de exponerlo al retrieval) y un nuevo `findByIds` para resolver contenido de citas.
+- El contenido recuperado se inyecta en el prompt como parte de un único mensaje de usuario con un preámbulo explícito de "no confiable, nunca instrucciones" — sin tocar los 7 adaptadores de proveedor (ninguno soporta hoy un rol de sistema). Lo persistido en el historial nunca incluye el contexto inyectado.
+- Citas persistidas por mensaje asistente en `rag.message_document` (`SELECTED`/`CITED`), expuestas en `MessageView.citations`, hidratadas tanto al generar como al releer el historial.
+- Corregido de paso un bug de esquema de `V7`: `rag.message_document.chunk_id` pasa de `ON DELETE SET NULL` a `ON DELETE CASCADE` (violaba su propio CHECK al borrar un chunk citado).
+- Sin UI todavía — selector de documentos en el composer y panel `/knowledge` quedan como la siguiente pieza, sin aprobar.
+- 17 tests nuevos/ampliados (unitarios + integración contra Postgres real). `./mvnw verify` completo en verde (176/176).
+
 ### Added — Sprint 5 RAG: extracción, normalización y chunking (2026-07-18)
 
 - Pipeline en background (`DocumentProcessingUseCase`/`DocumentProcessingService`) que lleva un documento de `UPLOADED` a `READY`, disparado tras cada upload nuevo sobre un `ExecutorService` propio, sin bloquear la respuesta HTTP.

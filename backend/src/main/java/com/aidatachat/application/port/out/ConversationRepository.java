@@ -3,6 +3,7 @@ package com.aidatachat.application.port.out;
 import com.aidatachat.domain.model.Conversation;
 import com.aidatachat.domain.model.ConversationMessage;
 import com.aidatachat.domain.model.ConversationToolCall;
+import com.aidatachat.domain.model.MessageDocumentRelation;
 import com.aidatachat.domain.model.MessageStatus;
 import com.aidatachat.domain.model.MessageToolCallStatus;
 import com.aidatachat.domain.model.ProviderType;
@@ -82,6 +83,25 @@ public interface ConversationRepository {
             Instant completedAt);
 
     Map<UUID, List<ConversationToolCall>> findToolCallsForMessages(Collection<UUID> messageIds);
+
+    /** Delete-then-insert, mirroring {@code VectorSearchPort.replaceChunks}'s idempotency. */
+    Conversation replaceSelectedDocuments(
+            UUID conversationId, UUID ownerId, List<UUID> documentIds, Instant updatedAt);
+
+    void recordMessageDocuments(
+            UUID conversationId,
+            UUID ownerId,
+            UUID messageId,
+            List<MessageDocumentEntry> entries,
+            Instant createdAt);
+
+    Map<UUID, List<MessageDocumentRef>> findCitationsForMessages(Collection<UUID> messageIds);
+
+    record MessageDocumentEntry(
+            UUID documentId, UUID chunkId, MessageDocumentRelation relation, Double score) {}
+
+    record MessageDocumentRef(
+            UUID documentId, UUID chunkId, MessageDocumentRelation relation, Double score) {}
 
     record ConversationPage(
             List<Conversation> items, int page, int size, long totalElements, int totalPages) {

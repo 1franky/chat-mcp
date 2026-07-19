@@ -7,6 +7,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -57,8 +58,20 @@ class ConversationEntity {
         this.updatedAt = timestamp;
     }
 
-    Conversation toDomain() {
+    UUID getId() {
+        return id;
+    }
+
+    Conversation toDomain(List<UUID> selectedDocumentIds) {
         return new Conversation(
-                id, ownerId, title, providerConnectionId, modelId, version, createdAt, updatedAt);
+                id,
+                ownerId,
+                title,
+                providerConnectionId,
+                modelId,
+                selectedDocumentIds,
+                version,
+                createdAt,
+                updatedAt);
     }
 }

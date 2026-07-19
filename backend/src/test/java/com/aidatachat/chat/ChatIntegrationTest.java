@@ -7,19 +7,29 @@ import static org.springframework.security.test.web.servlet.setup.SecurityMockMv
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.aidatachat.adapters.out.fake.FakeEmbeddingProviderAdapter;
 import com.aidatachat.adapters.out.security.AuthenticatedUser;
 import com.aidatachat.application.exception.ChatConflictException;
 import com.aidatachat.application.exception.ConversationNotFoundException;
 import com.aidatachat.application.port.in.ChatUseCase;
+import com.aidatachat.application.port.in.ChatUseCase.CitationView;
 import com.aidatachat.application.port.in.ChatUseCase.CreateConversationCommand;
 import com.aidatachat.application.port.in.ChatUseCase.GenerationEvent;
 import com.aidatachat.application.port.in.ChatUseCase.GenerationSession;
+import com.aidatachat.application.port.in.ChatUseCase.MessageView;
 import com.aidatachat.application.port.in.IdentityUseCase;
 import com.aidatachat.application.port.in.IdentityUseCase.RegisterCommand;
 import com.aidatachat.application.port.in.ProviderManagementUseCase;
 import com.aidatachat.application.port.in.ProviderManagementUseCase.SaveProviderCommand;
 import com.aidatachat.application.port.out.ConversationRepository;
+import com.aidatachat.application.port.out.DocumentRepository;
+import com.aidatachat.application.port.out.EmbeddingProviderPort;
+import com.aidatachat.application.port.out.VectorSearchPort;
+import com.aidatachat.application.port.out.VectorSearchPort.ChunkRecord;
 import com.aidatachat.domain.model.ConversationToolCall;
+import com.aidatachat.domain.model.Document;
+import com.aidatachat.domain.model.DocumentStatus;
+import com.aidatachat.domain.model.MessageDocumentRelation;
 import com.aidatachat.domain.model.MessageStatus;
 import com.aidatachat.domain.model.MessageToolCallStatus;
 import com.aidatachat.domain.model.ProviderType;
@@ -32,6 +42,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -67,6 +79,9 @@ class ChatIntegrationTest {
     @Autowired private ProviderManagementUseCase providers;
     @Autowired private ChatUseCase chat;
     @Autowired private ConversationRepository conversations;
+    @Autowired private DocumentRepository documents;
+    @Autowired private VectorSearchPort vectorSearch;
+    @Autowired private EmbeddingProviderPort embeddingProvider;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private WebApplicationContext webApplicationContext;
 
@@ -74,8 +89,12 @@ class ChatIntegrationTest {
 
     @BeforeEach
     void resetDatabase() {
+        jdbc.update("DELETE FROM rag.message_document");
+        jdbc.update("DELETE FROM chat.conversation_document");
         jdbc.update("DELETE FROM chat.message_tool_call");
         jdbc.update("DELETE FROM chat.message");
+        jdbc.update("DELETE FROM rag.document_chunk");
+        jdbc.update("DELETE FROM rag.document");
         jdbc.update("DELETE FROM chat.conversation");
         jdbc.update("DELETE FROM chat.provider_model");
         jdbc.update("DELETE FROM chat.provider_connection");
@@ -120,6 +139,127 @@ class ChatIntegrationTest {
                             assertThat(message.outputTokens()).isEqualTo(7);
                             assertThat(message.providerRequestId()).isEqualTo("fake-request");
                         });
+    }
+
+    @Test
+    void selectingDocumentsInjectsRetrievedContextAndPersistsCitations() throws Exception {
+        UserAccount owner = register("owner@example.test", "Owner");
+        ProviderSelection selection = fakeProvider(owner);
+        ChatUseCase.ConversationView conversation = createConversation(owner, selection);
+        UUID documentId = UUID.randomUUID();
+        UUID chunkId = UUID.randomUUID();
+        String queryText = "pregunta sobre el informe";
+        // rag.document/rag.document_chunk are seeded directly over JDBC (real Postgres, needed to
+        // satisfy the chat.conversation_document/rag.message_document foreign keys) while
+        // DocumentRepository/VectorSearchPort stay on their default in-memory fakes — mirrors how
+        // this test already drives ChatUseCase against a real LlmChatGateway fake connection.
+        insertDocument(documentId, owner.id());
+        insertChunk(chunkId, documentId, owner.id());
+        documents.save(
+                new Document(
+                        documentId,
+                        owner.id(),
+                        "informe.pdf",
+                        "storage-key",
+                        "application/pdf",
+                        1024,
+                        "a".repeat(64),
+                        DocumentStatus.READY,
+                        null,
+                        FakeEmbeddingProviderAdapter.MODEL_ID,
+                        FakeEmbeddingProviderAdapter.DIMENSION,
+                        1,
+                        0,
+                        Instant.now(),
+                        Instant.now()));
+        float[] matchingVector =
+                embeddingProvider
+                        .embed(FakeEmbeddingProviderAdapter.MODEL_ID, List.of(queryText))
+                        .vectors()
+                        .getFirst();
+        vectorSearch.replaceChunks(
+                owner.id(),
+                documentId,
+                List.of(
+                        new ChunkRecord(
+                                chunkId,
+                                0,
+                                "contenido citado del informe",
+                                4,
+                                null,
+                                FakeEmbeddingProviderAdapter.MODEL_ID,
+                                matchingVector,
+                                Instant.now())));
+
+        ChatUseCase.ConversationView selected =
+                chat.selectDocuments(
+                        owner.id(), conversation.id(), List.of(documentId), "127.0.0.1");
+        assertThat(selected.selectedDocumentIds()).containsExactly(documentId);
+
+        EventSubscriber subscriber = new EventSubscriber();
+        chat.startGeneration(owner.id(), conversation.id(), queryText, "127.0.0.1")
+                .events()
+                .subscribe(subscriber);
+        assertThat(subscriber.terminal.await(3, TimeUnit.SECONDS)).isTrue();
+        assertThat(subscriber.failure).isNull();
+
+        List<MessageView> messages = chat.listMessages(owner.id(), conversation.id());
+        assertThat(messages).hasSize(2);
+        assertThat(messages.getFirst().content()).isEqualTo(queryText);
+        MessageView assistantMessage = messages.getLast();
+        assertThat(assistantMessage.citations()).hasSize(1);
+        CitationView citation = assistantMessage.citations().getFirst();
+        assertThat(citation.documentId()).isEqualTo(documentId);
+        assertThat(citation.documentName()).isEqualTo("informe.pdf");
+        assertThat(citation.chunkId()).isEqualTo(chunkId);
+        assertThat(citation.pageNumber()).isEqualTo(4);
+        assertThat(citation.snippet()).isEqualTo("contenido citado del informe");
+
+        Integer messageDocumentRows =
+                jdbc.queryForObject(
+                        "SELECT count(*) FROM rag.message_document WHERE message_id = ?",
+                        Integer.class,
+                        assistantMessage.id());
+        assertThat(messageDocumentRows).isEqualTo(2);
+    }
+
+    @Test
+    void deletingACitedChunkCascadesInsteadOfViolatingTheRelationCheckConstraint() {
+        UserAccount owner = register("owner@example.test", "Owner");
+        ProviderSelection selection = fakeProvider(owner);
+        ChatUseCase.ConversationView conversation = createConversation(owner, selection);
+        UUID documentId = UUID.randomUUID();
+        UUID chunkId = UUID.randomUUID();
+        insertDocument(documentId, owner.id());
+        insertChunk(chunkId, documentId, owner.id());
+        ConversationRepository.GenerationMessages generation =
+                conversations.createGeneration(
+                        conversation.id(),
+                        owner.id(),
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        "Hola",
+                        selection.id(),
+                        ProviderType.FAKE,
+                        selection.modelId(),
+                        Instant.now());
+        conversations.recordMessageDocuments(
+                conversation.id(),
+                owner.id(),
+                generation.assistantMessage().id(),
+                List.of(
+                        new ConversationRepository.MessageDocumentEntry(
+                                documentId, chunkId, MessageDocumentRelation.CITED, 0.9)),
+                Instant.now());
+
+        jdbc.update("DELETE FROM rag.document_chunk WHERE id = ?", chunkId);
+
+        Integer remaining =
+                jdbc.queryForObject(
+                        "SELECT count(*) FROM rag.message_document WHERE chunk_id = ?",
+                        Integer.class,
+                        chunkId);
+        assertThat(remaining).isZero();
     }
 
     @Test
@@ -272,6 +412,38 @@ class ChatIntegrationTest {
                                         MessageToolCallStatus.PENDING,
                                         now))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    private void insertDocument(UUID id, UUID ownerId) {
+        jdbc.update(
+                """
+                INSERT INTO rag.document
+                    (id, owner_id, original_filename, storage_key, mime_type, byte_size,
+                     content_hash, status, embedding_model_id, embedding_dimension, chunk_count,
+                     version, created_at, updated_at)
+                VALUES (?, ?, 'informe.pdf', 'storage-key', 'application/pdf', 1024, ?, 'READY',
+                        'fake-embedding-v1', 1536, 1, 0, now(), now())
+                """,
+                id,
+                ownerId,
+                "a".repeat(64));
+    }
+
+    private void insertChunk(UUID id, UUID documentId, UUID ownerId) {
+        jdbc.update(
+                """
+                INSERT INTO rag.document_chunk
+                    (id, document_id, owner_id, chunk_index, content, page_number,
+                     embedding_model_id, embedding, created_at)
+                VALUES (?, ?, ?, 0, 'contenido citado del informe', 4, 'fake-embedding-v1',
+                        ?::vector, now())
+                """,
+                id,
+                documentId,
+                ownerId,
+                IntStream.range(0, 1536)
+                        .mapToObj(i -> "0")
+                        .collect(Collectors.joining(",", "[", "]")));
     }
 
     private ProviderSelection fakeProvider(UserAccount owner) {

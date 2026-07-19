@@ -6,7 +6,10 @@ El chat implementa conversaciones propias, mensajes persistentes, busqueda por t
 renombrado, borrado, cambio de proveedor/modelo para respuestas futuras, regeneracion, streaming y
 cancelacion (Sprint 3). Sprint 4 anade tool calling multi-proveedor (solo OpenAI y Anthropic) contra
 un cliente MCP Streamable HTTP real, con orquestacion de rondas en el backend — ver
-`docs/mcp-integration.md` y ADR-0009. No implementa documentos, RAG ni citas.
+`docs/mcp-integration.md` y ADR-0009. Desde 2026-07-18 (Sprint 5), una conversacion puede seleccionar
+documentos propios (`PUT .../documents`) para retrieval RAG opt-in: sin seleccion, el chat funciona
+igual que antes; con seleccion, cada mensaje recupera chunks relevantes y la respuesta persiste citas
+— ver `docs/rag.md`. Todavia sin UI (selector en el composer, panel `/knowledge`).
 
 La UI muestra el modo activo (`FAKE`/`real`) y el estado del MCP (`UP`/`DEGRADED`/`DOWN`) enlazando
 al panel de solo lectura en `/settings/mcp`.
@@ -19,6 +22,7 @@ POST   /api/conversations
 GET    /api/conversations/{conversationId}
 PUT    /api/conversations/{conversationId}/title
 PUT    /api/conversations/{conversationId}/selection
+PUT    /api/conversations/{conversationId}/documents
 DELETE /api/conversations/{conversationId}
 GET    /api/conversations/{conversationId}/messages
 POST   /api/conversations/{conversationId}/messages/stream
@@ -41,6 +45,10 @@ mensaje del asistente captura `providerConnectionId`, tipo, model ID, uso opcion
 request ID; cambiar la seleccion de la conversacion no reescribe mensajes anteriores.
 `V5__mcp_tool_calls.sql` anade `chat.message_tool_call`, colgando de la misma fila `ASSISTANT` de la
 generacion — no crea un nuevo rol de mensaje ni toca el indice de generacion unica (ver ADR-0009).
+`V8__rag_retrieval_and_conversation_documents.sql` anade `chat.conversation_document` (seleccion
+activa de documentos por conversacion, `ON DELETE CASCADE` en ambas FK) y corrige el `ON DELETE` de
+`rag.message_document.chunk_id` (`SET NULL` → `CASCADE`, ver `docs/rag.md`) — las citas tambien
+cuelgan del mensaje `ASSISTANT`, igual que los tool calls.
 
 Cada delta actualiza el contenido parcial antes de emitirse al navegador. Al completar cambia a
 `COMPLETED`; detener o perder el cliente cambia a `CANCELLED`; un error normalizado cambia a

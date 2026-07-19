@@ -80,7 +80,7 @@ class PgVectorSearchAdapterIntegrationTest {
 
         vectorSearch.index(ownerId, documentId, List.of(new VectorRecord(chunkId, embedding)));
 
-        List<VectorMatch> matches = vectorSearch.search(ownerId, embedding, 5);
+        List<VectorMatch> matches = vectorSearch.search(ownerId, List.of(documentId), embedding, 5);
         assertThat(matches).hasSize(1);
         assertThat(matches.getFirst().chunkId()).isEqualTo(chunkId);
         assertThat(matches.getFirst().score()).isCloseTo(1.0, offset(1e-6));
@@ -112,10 +112,47 @@ class PgVectorSearchAdapterIntegrationTest {
                         new VectorRecord(closeChunk, unitVector(0)),
                         new VectorRecord(farChunk, unitVector(1))));
 
-        List<VectorMatch> matches = vectorSearch.search(ownerId, unitVector(0), 5);
+        List<VectorMatch> matches =
+                vectorSearch.search(ownerId, List.of(documentId), unitVector(0), 5);
         assertThat(matches.getFirst().chunkId()).isEqualTo(closeChunk);
 
-        assertThat(vectorSearch.search(otherOwnerId, unitVector(0), 5)).isEmpty();
+        assertThat(vectorSearch.search(otherOwnerId, List.of(documentId), unitVector(0), 5))
+                .isEmpty();
+    }
+
+    @Test
+    void searchRestrictsResultsToTheRequestedDocuments() {
+        UUID otherDocumentId = UUID.randomUUID();
+        insertDocument(otherDocumentId, ownerId);
+        UUID inScopeChunk = UUID.randomUUID();
+        UUID outOfScopeChunk = UUID.randomUUID();
+        insertChunk(inScopeChunk, documentId, ownerId, 0);
+        insertChunk(outOfScopeChunk, otherDocumentId, ownerId, 0);
+        vectorSearch.index(
+                ownerId, documentId, List.of(new VectorRecord(inScopeChunk, unitVector(0))));
+        vectorSearch.index(
+                ownerId,
+                otherDocumentId,
+                List.of(new VectorRecord(outOfScopeChunk, unitVector(0))));
+
+        List<VectorMatch> matches =
+                vectorSearch.search(ownerId, List.of(documentId), unitVector(0), 5);
+
+        assertThat(matches).hasSize(1);
+        assertThat(matches.getFirst().chunkId()).isEqualTo(inScopeChunk);
+    }
+
+    @Test
+    void findByIdsResolvesContentScopedToOwner() {
+        UUID chunkId = UUID.randomUUID();
+        insertChunk(chunkId, documentId, ownerId, 0);
+
+        List<com.aidatachat.domain.model.DocumentChunk> found =
+                vectorSearch.findByIds(ownerId, List.of(chunkId));
+
+        assertThat(found).hasSize(1);
+        assertThat(found.getFirst().content()).isEqualTo("contenido de prueba");
+        assertThat(vectorSearch.findByIds(otherOwnerId, List.of(chunkId))).isEmpty();
     }
 
     @Test
@@ -150,7 +187,8 @@ class PgVectorSearchAdapterIntegrationTest {
                         Integer.class,
                         documentId);
         assertThat(count).isEqualTo(1);
-        List<VectorMatch> matches = vectorSearch.search(ownerId, unitVector(1), 5);
+        List<VectorMatch> matches =
+                vectorSearch.search(ownerId, List.of(documentId), unitVector(1), 5);
         assertThat(matches.getFirst().chunkId()).isEqualTo(secondChunk);
     }
 
@@ -179,7 +217,8 @@ class PgVectorSearchAdapterIntegrationTest {
                         Integer.class,
                         documentId);
         assertThat(count).isEqualTo(1);
-        List<VectorMatch> matches = vectorSearch.search(ownerId, unitVector(0), 5);
+        List<VectorMatch> matches =
+                vectorSearch.search(ownerId, List.of(documentId), unitVector(0), 5);
         assertThat(matches.getFirst().chunkId()).isEqualTo(originalChunk);
     }
 
@@ -213,8 +252,13 @@ class PgVectorSearchAdapterIntegrationTest {
                 """,
                 id,
                 ownerId,
-                "a".repeat(64),
+                contentHashFor(id),
                 DIMENSION);
+    }
+
+    private String contentHashFor(UUID id) {
+        String hex = id.toString().replace("-", "");
+        return (hex + hex + hex + hex).substring(0, 64);
     }
 
     private void insertChunk(UUID id, UUID documentId, UUID ownerId, int chunkIndex) {

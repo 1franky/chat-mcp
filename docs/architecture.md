@@ -64,14 +64,16 @@ flowchart LR
 ## Datos
 
 Flyway crea la extension `vector`, namespaces delimitados, identidad, sesiones, auditoria,
-proveedores y `chat.conversation`/`chat.message`. El schema `rag` tiene tablas (`document`,
-`document_chunk`, `message_document`) desde `V7`; `document` esta wireado de punta a punta
-(`DocumentManagementUseCase`/`DocumentController`, endpoint `POST /api/documents`) y desde 2026-07-18
-tambien `document_chunk`, cuyas filas se crean en background tras cada upload
-(`DocumentProcessingUseCase`: extraccion → chunking → embeddings → `VectorSearchPort.replaceChunks`)
-dejando el documento en `READY` — ver `docs/rag.md`. Sin caso de uso todavia: `message_document`
-(retrieval/citas, sin aprobar). JPA usa `ddl-auto=validate`; Flyway es la unica autoridad de
-esquema. Un indice parcial impide dos mensajes de asistente `STREAMING` para la misma conversacion y
+proveedores y `chat.conversation`/`chat.message` (mas `chat.conversation_document` desde `V8`,
+seleccion de documentos por conversacion). El schema `rag` tiene tablas (`document`, `document_chunk`,
+`message_document`) desde `V7`; `document` esta wireado de punta a punta
+(`DocumentManagementUseCase`/`DocumentController`, endpoint `POST /api/documents`), `document_chunk`
+desde la tarea de extraccion/chunking (`DocumentProcessingUseCase`: extraccion → chunking →
+embeddings → `VectorSearchPort.replaceChunks`, dejando el documento en `READY`), y desde 2026-07-18
+tambien `message_document` (`RagRetrievalUseCase` + `ChatService`: retrieval opt-in por conversacion,
+citas persistidas por mensaje asistente) — ver `docs/rag.md`. JPA usa `ddl-auto=validate`; Flyway es
+la unica autoridad de esquema. Un indice parcial impide dos mensajes de asistente `STREAMING` para la
+misma conversacion y
 un lock pesimista asigna posiciones estables.
 
 ## Flujo disponible

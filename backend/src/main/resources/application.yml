@@ -109,6 +109,10 @@ app:
     embedding:
       model-id: ${RAG_EMBEDDING_MODEL_ID:fake-embedding-v1}
       batch-size: ${RAG_EMBEDDING_BATCH_SIZE:64}
+    retrieval:
+      top-k: ${RAG_RETRIEVAL_TOP_K:5}
+      score-threshold: ${RAG_RETRIEVAL_SCORE_THRESHOLD:0.5}
+      max-context-characters: ${RAG_RETRIEVAL_MAX_CONTEXT_CHARACTERS:20000}
   providers:
     credential-master-key: ${CREDENTIAL_MASTER_KEY:}
     credential-key-version: ${CREDENTIAL_KEY_VERSION:1}

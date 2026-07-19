@@ -27,6 +27,14 @@ public interface ChatUseCase {
             String modelId,
             String remoteAddress);
 
+    /**
+     * Sets which documents (must belong to {@code ownerId}) are in scope for retrieval in this
+     * conversation. Opt-in: an empty list (the default for a new conversation) disables RAG
+     * entirely for every subsequent message — no embedding calls, no added latency.
+     */
+    ConversationView selectDocuments(
+            UUID ownerId, UUID conversationId, List<UUID> documentIds, String remoteAddress);
+
     void deleteConversation(UUID ownerId, UUID conversationId, String remoteAddress);
 
     List<MessageView> listMessages(UUID ownerId, UUID conversationId);
@@ -48,8 +56,14 @@ public interface ChatUseCase {
             String title,
             UUID providerConnectionId,
             String modelId,
+            List<UUID> selectedDocumentIds,
             Instant createdAt,
-            Instant updatedAt) {}
+            Instant updatedAt) {
+
+        public ConversationView {
+            selectedDocumentIds = List.copyOf(selectedDocumentIds);
+        }
+    }
 
     record ConversationPageView(
             List<ConversationView> items, int page, int size, long totalElements, int totalPages) {
@@ -76,10 +90,12 @@ public interface ChatUseCase {
             UUID regeneratedFromMessageId,
             Instant createdAt,
             Instant updatedAt,
-            List<ToolCallView> toolCalls) {
+            List<ToolCallView> toolCalls,
+            List<CitationView> citations) {
 
         public MessageView {
             toolCalls = List.copyOf(toolCalls);
+            citations = List.copyOf(citations);
         }
     }
 
@@ -93,6 +109,20 @@ public interface ChatUseCase {
             Map<String, Object> result,
             Boolean isError,
             String errorCode) {}
+
+    /**
+     * A chunk that was actually retrieved and injected into the prompt for this (assistant)
+     * message — {@code null} {@code chunkId} never occurs here (that's a {@code SELECTED}-only
+     * row, not exposed as a citation; see {@code ConversationRepository.MessageDocumentEntry}).
+     */
+    record CitationView(
+            UUID documentId,
+            String documentName,
+            UUID chunkId,
+            Integer pageNumber,
+            String sectionLabel,
+            String snippet,
+            double score) {}
 
     record GenerationSession(UUID generationId, Flow.Publisher<GenerationEvent> events) {}
 

@@ -34,6 +34,7 @@ import com.aidatachat.application.port.in.ChatUseCase;
 import com.aidatachat.application.port.in.DocumentManagementUseCase;
 import com.aidatachat.application.port.in.DocumentProcessingUseCase;
 import com.aidatachat.application.port.in.McpStatusUseCase;
+import com.aidatachat.application.port.in.RagRetrievalUseCase;
 import com.aidatachat.application.port.in.SystemStatusUseCase;
 import com.aidatachat.application.port.out.AuditRepository;
 import com.aidatachat.application.port.out.ConversationRepository;
@@ -58,6 +59,7 @@ import com.aidatachat.application.service.DocumentProcessingService;
 import com.aidatachat.application.service.IdentityService;
 import com.aidatachat.application.service.McpStatusService;
 import com.aidatachat.application.service.ProviderManagementService;
+import com.aidatachat.application.service.RagRetrievalService;
 import com.aidatachat.application.service.SystemStatusService;
 import java.time.Clock;
 import java.time.Duration;
@@ -202,6 +204,18 @@ public class ApplicationBeansConfiguration {
                 maxChunksPerDocument,
                 embeddingModelId,
                 embeddingBatchSize);
+    }
+
+    @Bean
+    RagRetrievalUseCase ragRetrievalUseCase(
+            DocumentRepository documents,
+            EmbeddingProviderPort embeddingProvider,
+            VectorSearchPort vectorSearch,
+            @Value("${app.rag.embedding.model-id:fake-embedding-v1}") String embeddingModelId,
+            @Value("${app.rag.retrieval.top-k:5}") int topK,
+            @Value("${app.rag.retrieval.score-threshold:0.5}") double scoreThreshold) {
+        return new RagRetrievalService(
+                documents, embeddingProvider, vectorSearch, embeddingModelId, topK, scoreThreshold);
     }
 
     @Bean
@@ -376,6 +390,9 @@ public class ApplicationBeansConfiguration {
     @Bean
     ChatUseCase chatUseCase(
             ConversationRepository conversations,
+            DocumentRepository documents,
+            VectorSearchPort vectorSearch,
+            RagRetrievalUseCase ragRetrievalUseCase,
             LlmChatGateway llm,
             McpGateway mcpGateway,
             AuditRepository audit,
@@ -385,10 +402,15 @@ public class ApplicationBeansConfiguration {
             @Value("${app.chat.max-response-characters:1000000}") int maxResponseCharacters,
             @Value("${app.chat.max-tool-rounds:6}") int maxToolRounds,
             @Value("${app.chat.max-tool-result-bytes:1048576}") int maxToolResultBytes,
+            @Value("${app.rag.retrieval.max-context-characters:20000}")
+                    int maxRetrievalContextCharacters,
             @Value("${app.mcp.tool-call-timeout:20s}") Duration toolCallTimeout,
             ExecutorService mcpToolOrchestrationExecutor) {
         return new ChatService(
                 conversations,
+                documents,
+                vectorSearch,
+                ragRetrievalUseCase,
                 llm,
                 mcpGateway,
                 audit,
@@ -398,6 +420,7 @@ public class ApplicationBeansConfiguration {
                 maxResponseCharacters,
                 maxToolRounds,
                 maxToolResultBytes,
+                maxRetrievalContextCharacters,
                 toolCallTimeout,
                 mcpToolOrchestrationExecutor);
     }
