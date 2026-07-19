@@ -5,12 +5,13 @@
 El propietario del proyecto aprobó arrancar el Sprint 5 explícitamente el 2026-07-17, empezando por
 el esquema de base de datos y `EmbeddingProviderPort`; el mismo día aprobó los adaptadores reales y
 fake para `DocumentRepository`, `DocumentStoragePort` y `VectorSearchPort`; después el endpoint de
-subida `POST /api/documents` con sus protecciones; y el 2026-07-18 aprobó extracción, normalización
-y chunking, que llevan un documento de `UPLOADED` a `READY` con chunks y embeddings reales
-(sobre el fake) indexados. Todavía no existen retrieval ni citas: los chunks quedan indexados pero
-nada los consulta. El resto de este sprint (retrieval, citas, selección de documentos en el chat y
-el panel `/knowledge`) sigue sin aprobar y no debe iniciarse sin luz verde explícita — ver
-`TASKS.md`.
+subida `POST /api/documents` con sus protecciones; el mismo 2026-07-18 aprobó primero extracción,
+normalización y chunking (documento `UPLOADED` → `READY` con chunks y embeddings reales sobre el
+fake indexados), y después, con una segunda luz verde el mismo día, **retrieval y citas — solo
+backend**. Un chat puede ahora seleccionar documentos por conversación y recibir respuestas
+fundamentadas en ellos con citas persistidas; lo que falta es exclusivamente la UI (selector de
+documentos en el composer del chat y el panel `/knowledge` — nunca se construyó ninguna pantalla de
+documentos en el frontend todavía). No inicies esa UI sin luz verde explícita — ver `TASKS.md`.
 
 ### Esquema `rag` (migraciones `V6`/`V7`)
 
@@ -82,23 +83,29 @@ mismo patrón JPA que `ConversationJpaAdapter`: filtra siempre por `ownerId` exp
 de nombre de archivo antes de resolver la ruta bajo `basePath/ownerId`, para que ningún segmento
 `..` pueda escapar del directorio del propietario. Fake en memoria `FakeDocumentStorageAdapter`.
 
-`VectorSearchPort` (`search`/`deleteByDocument`, ya definido en el sprint anterior, más
-`replaceChunks` desde 2026-07-18 — ver la sección de chunking abajo) tiene ahora
-`PgVectorSearchAdapter` (`adapters/out/persistence/rag/`): **JDBC nativo vía `JdbcTemplate` +
-la librería `com.pgvector:pgvector`**, no JPA — Hibernate no tiene soporte nativo para el tipo
-`vector` en este stack, así que este adaptador es el único punto del backend que usa SQL directo en
-lugar de un repositorio Spring Data. Decisiones de diseño:
+`VectorSearchPort` (`deleteByDocument`, ya definido en el sprint anterior, más `replaceChunks` desde
+la tarea de chunking) tiene ahora `PgVectorSearchAdapter` (`adapters/out/persistence/rag/`): **JDBC
+nativo vía `JdbcTemplate` + la librería `com.pgvector:pgvector`**, no JPA — Hibernate no tiene
+soporte nativo para el tipo `vector` en este stack, así que este adaptador es el único punto del
+backend que usa SQL directo en lugar de un repositorio Spring Data. Decisiones de diseño:
 - `index()` hace `UPDATE` de la columna `embedding` sobre chunks que **ya existen** en
   `rag.document_chunk`, nunca `INSERT`. Ningún caso de uso lo invoca todavía — queda reservado para
   un futuro reindex que solo recalcule embeddings sobre contenido ya existente (p. ej. al cambiar de
   modelo de embeddings), a diferencia de `replaceChunks`, que sí es la escritura inicial real usada
-  por el chunking (ver abajo). Si un `chunkId` no existe, lanza `IllegalStateException`.
-- `search()` ordena por distancia coseno (`<=>`) usando el índice HNSW ya creado en `V7`;
-  `VectorMatch.score()` es `1 - distancia` (similitud coseno). El fake usa el mismo criterio para
-  ser intercambiable.
-- Nuevo dominio `DocumentChunk` (2026-07-18): mapea 1:1 el CHECK de `rag.document_chunk`. No se creó
-  ningún modelo de dominio ni port para `rag.message_document` — sigue sin caso de uso (retrieval/
-  citas no aprobado todavía).
+  por el chunking. Si un `chunkId` no existe, lanza `IllegalStateException`.
+- `search(ownerId, documentIds, query, topK)` (firma ampliada 2026-07-18: antes no tenía
+  `documentIds` — buscaba sobre *todos* los chunks del owner. Se corrigió antes de que el retrieval
+  la usara, porque sin el filtro el "opt-in por documentos seleccionados" quedaría roto: chunks de
+  documentos no elegidos para esa conversación podrían colar contenido no autorizado) ordena por
+  distancia coseno (`<=>`) usando el índice HNSW ya creado en `V7`, acotado con `AND document_id =
+  ANY(?)`; `VectorMatch.score()` es `1 - distancia` (similitud coseno). El fake usa el mismo
+  criterio para ser intercambiable. Nota de rendimiento conocida: pgvector+HNSW no siempre empuja
+  ese filtro dentro del índice ANN — aceptable para el volumen esperado (documentos de un usuario,
+  no un corpus masivo).
+- `findByIds(ownerId, chunkIds)` (nuevo 2026-07-18): resuelve contenido/página/sección completos por
+  id, scoped al owner — usado tanto por el retrieval en caliente como para hidratar citas al releer
+  el historial de un chat.
+- Nuevo dominio `DocumentChunk` (2026-07-18): mapea 1:1 el CHECK de `rag.document_chunk`.
 
 Los seis adaptadores (`DocumentJpaAdapter`, `FilesystemDocumentStorageAdapter`,
 `PgVectorSearchAdapter` y sus tres fakes) son beans condicionales por `app.integrations.mode` en
@@ -274,15 +281,92 @@ idempotente y con rollback atómico), `DocumentControllerIntegrationTest` amplia
 real vía HTTP, espera a que llegue a `READY` y confirma chunks reales en `rag.document_chunk`).
 `./mvnw verify` completo del backend en verde (159/159).
 
+### Retrieval y citas (backend)
+
+Aprobado el 2026-07-18, con una segunda luz verde explícita el mismo día tras cerrar la extracción/
+chunking. **Solo backend** — el selector de documentos en el composer del chat y el panel
+`/knowledge` quedan como la siguiente pieza (ver "Pendiente de aprobación" abajo).
+
+**Retrieval es opt-in por conversación**: solo se ejecuta si el usuario seleccionó ≥1 documento para
+esa conversación. Sin selección, cero llamadas a `embed()`/`search()`, cero latencia extra, el chat
+se comporta exactamente igual que antes de esta tarea.
+
+- **Selección de documentos por conversación**: tabla-hija `chat.conversation_document`
+  (`conversation_id`+`document_id` como PK compuesta, `ON DELETE CASCADE` en ambos — se eligió
+  explícitamente una tabla en vez de una columna `uuid[]` en `chat.conversation`, porque un array de
+  Postgres no admite FK por elemento: borrar un documento no habría limpiado automáticamente su
+  presencia en el array de ninguna conversación). `ChatUseCase.selectDocuments(ownerId,
+  conversationId, documentIds, remoteAddress)` — nuevo endpoint `PUT
+  /api/conversations/{id}/documents` (deliberadamente separado de `PUT .../selection`, que sigue
+  siendo solo para proveedor/modelo: son dos ciclos de vida independientes). Valida que todos los
+  `documentIds` pertenezcan al owner (404 si no, nunca 403); **no** exige `READY` al seleccionar — se
+  puede seleccionar un documento aún `PROCESSING`, y el retrieval simplemente lo ignora en silencio
+  turno a turno hasta que esté listo.
+- **`RagRetrievalUseCase`/`RagRetrievalService`** (nuevo, cableado a mano igual que
+  `DocumentProcessingUseCase`): dado `ownerId`+`documentIds`+texto de la pregunta, valida
+  ownership+`READY` de los documentos (ignora en silencio los que no lo estén — un documento borrado
+  o aún procesando nunca rompe el chat, solo no aporta contexto ese turno), corta **antes** de llamar
+  a `embed()` si no queda ningún documento válido, embebe la pregunta con el modelo configurado
+  (`app.rag.embedding.model-id`, el mismo que usa el chunking), busca `top-k`
+  (`app.rag.retrieval.top-k`, default 5) acotado a esos documentos vía `VectorSearchPort.search`, y
+  filtra por `score >= app.rag.retrieval.score-threshold` (default 0.5).
+- **Inyección en el prompt sin tocar los adaptadores de proveedor**: ningún adaptador soporta hoy
+  `role="system"` (y Anthropic usa un parámetro top-level `system` separado, no un mensaje) —
+  ampliar los 7 adaptadores de proveedor para soportarlo estaba fuera de alcance de esta tarea. En
+  su lugar, `ChatService.startGeneration`/`regenerate` componen el contenido recuperado y la
+  pregunta en un único `ChatMessage(role="user", ...)` con un preámbulo explícito instruyendo al
+  modelo a tratar los fragmentos como datos de consulta, nunca como instrucciones — **mitigación a
+  nivel de prompt, documentada explícitamente como no una garantía técnica dura** (ningún LLM obedece
+  instrucciones de prompt de forma infalible). Lo que se **persiste** en `chat.message` sigue siendo
+  el mensaje original del usuario sin augmentar — solo el `ChatMessage` enviado al proveedor en ese
+  turno lleva el bloque de contexto — para que el historial no acumule contexto en cada
+  regeneración/carga futura y cada turno vuelva a recuperar en fresco. Cap defensivo
+  `app.rag.retrieval.max-context-characters` (default 20000) sobre el bloque de contexto, que nunca
+  recorta la pregunta real del usuario (se acota antes de anexarla, no después).
+- **Citas** (`rag.message_document`, tabla ya creada en `V7` pero sin ningún caso de uso hasta
+  ahora): filas `SELECTED` (`chunk_id` null — un documento estaba en el alcance de la pregunta) y
+  `CITED` (`chunk_id` no null — un chunk concreto superó el umbral y se inyectó de verdad), ambas
+  asociadas siempre al mensaje **asistente** de la generación (es la respuesta la que está
+  fundamentada en los documentos, no la pregunta). Nuevos métodos en `ConversationRepository`:
+  `recordMessageDocuments` (mismo patrón `lockConversation` que ya usa `recordToolCall`),
+  `findCitationsForMessages`, `replaceSelectedDocuments`. `ChatUseCase.MessageView` gana
+  `citations: List<CitationView>`, hidratadas tanto en el momento de generar (con el resultado del
+  retrieval ya en memoria) como al releer el historial (`listMessages`, vía
+  `VectorSearchPort.findByIds` + `DocumentRepository.findAllByIdsAndOwnerId` — mismo patrón de
+  composición en la capa de aplicación que ya usa `toolCallsByMessage`, ya que `document_chunk` vive
+  fuera de JPA y no admite un JOIN JPQL directo).
+- **Bug de esquema corregido de paso** (migración `V8`): `rag.message_document.chunk_id` declaraba
+  `ON DELETE SET NULL` en `V7`, pero el propio CHECK exige `chunk_id IS NOT NULL` cuando
+  `relation='CITED'` — borrar un chunk citado habría violado su propio constraint. Era inofensivo
+  mientras nada poblara `CITED` (hasta esta tarea); corregido a `ON DELETE CASCADE`. También se
+  añadió `rag.message_document.score` (`double precision`, CHECK: obligatoria en `CITED`, prohibida
+  en `SELECTED`) — sin esto no habría forma de reproducir el score original de una cita al releer el
+  historial días después.
+- **Explícitamente diferido**: full-text search híbrido (la propia spec lo condiciona con "cuando
+  aporte valor"; requeriría una migración adicional con `tsvector`/GIN y un algoritmo de fusión de
+  ranking), adaptador real de `EmbeddingProviderPort`, endpoint `POST /api/documents/{id}/reindex`, y
+  toda la UI (selector de documentos en el composer, panel `/knowledge`).
+
+Verificado el 2026-07-18: unitarios — `RagRetrievalServiceTest` (documento no-`READY`/no-owned
+ignorado sin llamar a `embed()`, filtrado por umbral, ranking por score), `FakeVectorSearchAdapterTest`
+ampliado (`search` acotado por documento, `findByIds`), `ChatServiceTest` ampliado (mensaje
+augmentado solo con selección+resultados no vacíos, contenido persistido sin augmentar,
+`recordMessageDocuments` con las entradas `SELECTED`/`CITED` correctas, `selectDocuments` valida
+ownership, hidratación de citas en `listMessages`). Integración contra Postgres real vía
+Testcontainers — `PgVectorSearchAdapterIntegrationTest` ampliado, `PostgresMigrationTest` ampliado
+para `V8`, `ChatIntegrationTest` ampliado (flujo completo seleccionar documento → enviar mensaje →
+citas persistidas end-to-end contra Postgres real, y que borrar un chunk citado ya no rompe el CHECK
+tras el fix del FK). `./mvnw verify` completo del backend en verde (176/176).
+
 ## Pendiente de aprobación
 
-- Retrieval combinando búsqueda vectorial y full-text search, top-k/umbral configurables, citas y
-  tratamiento del contenido recuperado como no confiable (ignorar instrucciones embebidas en
-  documentos).
+- Selector de documentos en el composer del chat, estado de indexación visible, citas en los
+  mensajes del frontend y panel `/knowledge` (backend ya listo: `PUT /api/conversations/{id}/documents`,
+  `GET /api/documents` para listar candidatos, `MessageView.citations`) — nunca se construyó ninguna
+  pantalla de documentos en el frontend todavía.
 - Endpoint `POST /api/documents/{id}/reindex`.
 - Adaptador real de `EmbeddingProviderPort` (OpenAI embeddings u otro proveedor).
-- Selector de documentos en el composer del chat, estado de indexación, citas en los mensajes y
-  panel `/knowledge`.
+- Full-text search híbrido combinado con la búsqueda vectorial ya implementada.
 
 Cuando cada pieza se apruebe, las pruebas deberán cubrir aislamiento por usuario, límites, archivos
 maliciosos y citas reproducibles, igual que el resto del backend: sin llamadas a APIs de embeddings

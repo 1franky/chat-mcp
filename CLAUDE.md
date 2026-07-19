@@ -17,11 +17,14 @@ Sprint 5 pieces are approved and landed so far (as of 2026-07-18: the `rag` Flyw
 `EmbeddingProviderPort`, real+fake adapters for `DocumentRepository`/`DocumentStoragePort`/
 `VectorSearchPort`, the `POST /api/documents` upload endpoint with its protections — size limit,
 real-MIME detection via Tika, ZIP-bomb guard, UUID storage names, SHA-256 idempotency, owner
-isolation — and extraction/normalization/chunking: a background pipeline
-(`DocumentProcessingUseCase`, PDFBox/POI-based extraction, `TextChunker`, batched embeddings against
-the fake provider) that takes an uploaded document from `UPLOADED` through `PROCESSING` to
-`READY`/`FAILED`, populating `rag.document_chunk` for real. Retrieval, citations, document
-selection in chat, and the `/knowledge` UI are still unapproved).
+isolation — extraction/normalization/chunking: a background pipeline (`DocumentProcessingUseCase`,
+PDFBox/POI-based extraction, `TextChunker`, batched embeddings against the fake provider) that takes
+an uploaded document from `UPLOADED` through `PROCESSING` to `READY`/`FAILED`, populating
+`rag.document_chunk` for real — and retrieval + citations (**backend only**, as of 2026-07-18):
+opt-in per-conversation document selection (`ChatUseCase.selectDocuments`, `chat.conversation_document`),
+`RagRetrievalUseCase` scoping search to selected `READY` documents, and citations persisted per
+assistant message in `rag.message_document`. The document selector in the chat composer and the
+`/knowledge` UI are still unapproved/unbuilt — no frontend for documents exists yet).
 
 ## Commands
 
@@ -98,13 +101,13 @@ configuration → wires application.service to concrete adapters
   and are swapped in by `configuration`.
 - Flyway is the sole schema authority (`ddl-auto=validate`); migrations live in
   `backend/src/main/resources/db/migration`. Schemas: `identity`, `audit`, provider tables, and
-  `chat.conversation`/`chat.message`. The `rag` schema has `document`, `document_chunk`
-  (`vector(1536)` + HNSW index) and `message_document` (`V7`). Both `document` and `document_chunk`
-  are fully wired end to end: `POST /api/documents` (`DocumentManagementUseCase`/`DocumentController`)
-  leaves a document `UPLOADED`, then `DocumentProcessingUseCase` extracts/chunks/embeds it in the
-  background into `READY` with real `document_chunk` rows. `message_document` still has no use case
-  consuming it (retrieval/citations not approved) — see `docs/rag.md` for exactly what is and isn't
-  approved.
+  `chat.conversation`/`chat.message`/`chat.conversation_document` (`V8`). The `rag` schema has
+  `document`, `document_chunk` (`vector(1536)` + HNSW index) and `message_document` (`V7`). All
+  three are fully wired end to end: `POST /api/documents` (`DocumentManagementUseCase`/
+  `DocumentController`) leaves a document `UPLOADED`, `DocumentProcessingUseCase` extracts/chunks/
+  embeds it in the background into `READY` with real `document_chunk` rows, and `RagRetrievalUseCase`
+  + `ChatService` populate `message_document` with `SELECTED`/`CITED` rows per assistant message when
+  a conversation has documents selected — see `docs/rag.md` for exactly what is and isn't approved.
 - Adding or changing an integration (LLM provider, MCP transport, etc.) means adding an adapter
   behind the existing port — never reaching into `application`/`domain` from adapter code, and
   never adding a new external dependency directly into `application` or `domain`.

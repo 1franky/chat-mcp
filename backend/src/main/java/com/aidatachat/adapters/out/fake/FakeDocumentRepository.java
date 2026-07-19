@@ -3,6 +3,7 @@ package com.aidatachat.adapters.out.fake;
 import com.aidatachat.application.port.out.DocumentRepository;
 import com.aidatachat.domain.model.Document;
 import com.aidatachat.domain.model.DocumentStatus;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +23,14 @@ public final class FakeDocumentRepository implements DocumentRepository {
     public Optional<Document> findByIdAndOwnerId(UUID documentId, UUID ownerId) {
         return Optional.ofNullable(documents.get(documentId))
                 .filter(document -> document.ownerId().equals(ownerId));
+    }
+
+    @Override
+    public List<Document> findAllByIdsAndOwnerId(Collection<UUID> documentIds, UUID ownerId) {
+        return documents.values().stream()
+                .filter(document -> document.ownerId().equals(ownerId))
+                .filter(document -> documentIds.contains(document.id()))
+                .toList();
     }
 
     @Override

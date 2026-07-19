@@ -1,6 +1,8 @@
 package com.aidatachat.application.port.out;
 
+import com.aidatachat.domain.model.DocumentChunk;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -19,7 +21,14 @@ public interface VectorSearchPort {
      */
     void index(UUID ownerId, UUID documentId, List<VectorRecord> vectors);
 
-    List<VectorMatch> search(UUID ownerId, float[] query, int topK);
+    /**
+     * Ranks chunks by cosine similarity to {@code query}, restricted to {@code documentIds} —
+     * never searches beyond the caller-supplied scope, even within the same owner.
+     */
+    List<VectorMatch> search(UUID ownerId, Collection<UUID> documentIds, float[] query, int topK);
+
+    /** Resolves full chunk content (for prompt context / citations) by id, scoped to the owner. */
+    List<DocumentChunk> findByIds(UUID ownerId, Collection<UUID> chunkIds);
 
     void deleteByDocument(UUID ownerId, UUID documentId);
 

@@ -132,4 +132,29 @@ class PostgresMigrationTest {
         assertThat(hnswIndexes).isOne();
         assertThat(ownerColumns).containsExactly("document", "document_chunk");
     }
+
+    @Test
+    void v8AddsConversationDocumentsAndFixesTheMessageDocumentChunkForeignKey() {
+        List<String> conversationDocumentTable =
+                jdbcTemplate.queryForList(
+                        "SELECT table_name FROM information_schema.tables "
+                                + "WHERE table_schema = 'chat' AND table_name = 'conversation_document'",
+                        String.class);
+        String chunkForeignKeyDeleteAction =
+                jdbcTemplate.queryForObject(
+                        "SELECT confdeltype FROM pg_constraint "
+                                + "WHERE conname = 'message_document_chunk_id_fkey'",
+                        String.class);
+        Boolean scoreColumnExists =
+                jdbcTemplate.queryForObject(
+                        "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                                + "WHERE table_schema = 'rag' AND table_name = 'message_document' "
+                                + "AND column_name = 'score')",
+                        Boolean.class);
+
+        assertThat(conversationDocumentTable).containsExactly("conversation_document");
+        // 'c' = ON DELETE CASCADE (was 'n' = ON DELETE SET NULL before V8).
+        assertThat(chunkForeignKeyDeleteAction).isEqualTo("c");
+        assertThat(scoreColumnExists).isTrue();
+    }
 }

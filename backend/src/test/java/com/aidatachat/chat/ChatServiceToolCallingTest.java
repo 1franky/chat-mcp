@@ -13,10 +13,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aidatachat.application.port.in.ChatUseCase.GenerationEvent;
+import com.aidatachat.application.port.in.RagRetrievalUseCase;
 import com.aidatachat.application.port.out.AuditRepository;
 import com.aidatachat.application.port.out.ConversationRepository;
+import com.aidatachat.application.port.out.DocumentRepository;
 import com.aidatachat.application.port.out.LlmChatGateway;
 import com.aidatachat.application.port.out.McpGateway;
+import com.aidatachat.application.port.out.VectorSearchPort;
 import com.aidatachat.application.service.ChatService;
 import com.aidatachat.domain.model.Conversation;
 import com.aidatachat.domain.model.ConversationMessage;
@@ -58,12 +61,23 @@ class ChatServiceToolCallingTest {
             new McpToolDefinition("health_check", "Check health", Map.of(), true);
 
     private final ConversationRepository conversations = mock(ConversationRepository.class);
+    private final DocumentRepository documents = mock(DocumentRepository.class);
+    private final VectorSearchPort vectorSearch = mock(VectorSearchPort.class);
+    private final RagRetrievalUseCase ragRetrieval = mock(RagRetrievalUseCase.class);
     private final LlmChatGateway llm = mock(LlmChatGateway.class);
     private final McpGateway mcp = mock(McpGateway.class);
     private final AuditRepository audit = mock(AuditRepository.class);
     private final Conversation conversation =
             new Conversation(
-                    CONVERSATION_ID, OWNER_ID, "Prueba", PROVIDER_ID, "gpt-test", 0, NOW, NOW);
+                    CONVERSATION_ID,
+                    OWNER_ID,
+                    "Prueba",
+                    PROVIDER_ID,
+                    "gpt-test",
+                    List.of(),
+                    0,
+                    NOW,
+                    NOW);
     private ChatService service;
 
     @BeforeEach
@@ -71,6 +85,9 @@ class ChatServiceToolCallingTest {
         service =
                 new ChatService(
                         conversations,
+                        documents,
+                        vectorSearch,
+                        ragRetrieval,
                         llm,
                         mcp,
                         audit,
@@ -80,6 +97,7 @@ class ChatServiceToolCallingTest {
                         20_000,
                         3,
                         1_048_576,
+                        20_000,
                         Duration.ofSeconds(5),
                         Executors.newCachedThreadPool());
         when(mcp.status())

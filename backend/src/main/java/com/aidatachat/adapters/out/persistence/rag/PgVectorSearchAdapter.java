@@ -1,11 +1,13 @@
 package com.aidatachat.adapters.out.persistence.rag;
 
 import com.aidatachat.application.port.out.VectorSearchPort;
+import com.aidatachat.domain.model.DocumentChunk;
 import com.pgvector.PGvector;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
@@ -100,19 +102,55 @@ public class PgVectorSearchAdapter implements VectorSearchPort {
     }
 
     @Override
-    public List<VectorMatch> search(UUID ownerId, float[] query, int topK) {
+    public List<VectorMatch> search(
+            UUID ownerId, Collection<UUID> documentIds, float[] query, int topK) {
+        UUID[] documentIdArray = documentIds.toArray(new UUID[0]);
         return jdbcTemplate.query(
                 """
                 SELECT id, embedding <=> ? AS distance FROM rag.document_chunk
-                WHERE owner_id = ? ORDER BY embedding <=> ? LIMIT ?
+                WHERE owner_id = ? AND document_id = ANY(?) ORDER BY embedding <=> ? LIMIT ?
                 """,
+                ps -> {
+                    ps.setObject(1, new PGvector(query));
+                    ps.setObject(2, ownerId);
+                    ps.setArray(3, ps.getConnection().createArrayOf("uuid", documentIdArray));
+                    ps.setObject(4, new PGvector(query));
+                    ps.setInt(5, topK);
+                },
                 (rs, rowNum) ->
                         new VectorMatch(
-                                rs.getObject("id", UUID.class), 1.0 - rs.getDouble("distance")),
-                new PGvector(query),
-                ownerId,
-                new PGvector(query),
-                topK);
+                                rs.getObject("id", UUID.class), 1.0 - rs.getDouble("distance")));
+    }
+
+    @Override
+    public List<DocumentChunk> findByIds(UUID ownerId, Collection<UUID> chunkIds) {
+        if (chunkIds.isEmpty()) {
+            return List.of();
+        }
+        UUID[] chunkIdArray = chunkIds.toArray(new UUID[0]);
+        return jdbcTemplate.query(
+                """
+                SELECT id, document_id, owner_id, chunk_index, content, page_number, section_label,
+                       embedding_model_id, embedding::text AS embedding_text, created_at
+                FROM rag.document_chunk
+                WHERE owner_id = ? AND id = ANY(?)
+                """,
+                ps -> {
+                    ps.setObject(1, ownerId);
+                    ps.setArray(2, ps.getConnection().createArrayOf("uuid", chunkIdArray));
+                },
+                (rs, rowNum) ->
+                        new DocumentChunk(
+                                rs.getObject("id", UUID.class),
+                                rs.getObject("document_id", UUID.class),
+                                rs.getObject("owner_id", UUID.class),
+                                rs.getInt("chunk_index"),
+                                rs.getString("content"),
+                                (Integer) rs.getObject("page_number"),
+                                rs.getString("section_label"),
+                                rs.getString("embedding_model_id"),
+                                new PGvector(rs.getString("embedding_text")).toArray(),
+                                rs.getTimestamp("created_at").toInstant()));
     }
 
     @Override

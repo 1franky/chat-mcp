@@ -10,8 +10,13 @@ import com.aidatachat.domain.model.MessageRole;
 import com.aidatachat.domain.model.MessageStatus;
 import com.aidatachat.domain.model.MessageToolCallStatus;
 import com.aidatachat.domain.model.ProviderType;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -20,6 +25,8 @@ import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.jdbc.core.BatchPreparedStatementSetter;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,14 +36,20 @@ public class ConversationJpaAdapter implements ConversationRepository {
     private final SpringDataConversationRepository conversations;
     private final SpringDataConversationMessageRepository messages;
     private final SpringDataConversationMessageToolCallRepository toolCalls;
+    private final SpringDataMessageDocumentRepository messageDocuments;
+    private final JdbcTemplate jdbcTemplate;
 
     public ConversationJpaAdapter(
             SpringDataConversationRepository conversations,
             SpringDataConversationMessageRepository messages,
-            SpringDataConversationMessageToolCallRepository toolCalls) {
+            SpringDataConversationMessageToolCallRepository toolCalls,
+            SpringDataMessageDocumentRepository messageDocuments,
+            JdbcTemplate jdbcTemplate) {
         this.conversations = conversations;
         this.messages = messages;
         this.toolCalls = toolCalls;
+        this.messageDocuments = messageDocuments;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
@@ -50,8 +63,17 @@ public class ConversationJpaAdapter implements ConversationRepository {
                                 page,
                                 size,
                                 Sort.by(Sort.Order.desc("updatedAt"), Sort.Order.desc("id"))));
+        Map<UUID, List<UUID>> selectedDocumentsByConversation =
+                selectedDocumentIdsByConversation(
+                        result.getContent().stream().map(ConversationEntity::getId).toList());
         return new ConversationPage(
-                result.getContent().stream().map(ConversationEntity::toDomain).toList(),
+                result.getContent().stream()
+                        .map(
+                                entity ->
+                                        entity.toDomain(
+                                                selectedDocumentsByConversation.getOrDefault(
+                                                        entity.getId(), List.of())))
+                        .toList(),
                 result.getNumber(),
                 result.getSize(),
                 result.getTotalElements(),
@@ -63,7 +85,7 @@ public class ConversationJpaAdapter implements ConversationRepository {
     public Optional<Conversation> findByIdAndOwnerId(UUID conversationId, UUID ownerId) {
         return conversations
                 .findByIdAndOwnerId(conversationId, ownerId)
-                .map(ConversationEntity::toDomain);
+                .map(entity -> entity.toDomain(selectedDocumentIds(conversationId)));
     }
 
     @Override
@@ -78,7 +100,8 @@ public class ConversationJpaAdapter implements ConversationRepository {
                                     return current;
                                 })
                         .orElseGet(() -> new ConversationEntity(conversation));
-        return conversations.saveAndFlush(entity).toDomain();
+        ConversationEntity saved = conversations.saveAndFlush(entity);
+        return saved.toDomain(selectedDocumentIds(saved.getId()));
     }
 
     @Override
@@ -151,7 +174,9 @@ public class ConversationJpaAdapter implements ConversationRepository {
         conversation.touch(createdAt);
         conversations.flush();
         return new GenerationMessages(
-                conversation.toDomain(), saved.get(0).toDomain(), saved.get(1).toDomain());
+                conversation.toDomain(selectedDocumentIds(conversationId)),
+                saved.get(0).toDomain(),
+                saved.get(1).toDomain());
     }
 
     @Override
@@ -291,6 +316,121 @@ public class ConversationJpaAdapter implements ConversationRepository {
             ConversationMessageToolCallEntity toolCall, UUID conversationId) {
         return messages.findByIdAndConversationId(toolCall.getMessageId(), conversationId)
                 .isPresent();
+    }
+
+    @Override
+    @Transactional
+    public Conversation replaceSelectedDocuments(
+            UUID conversationId, UUID ownerId, List<UUID> documentIds, Instant updatedAt) {
+        ConversationEntity conversation = lockConversation(conversationId, ownerId);
+        jdbcTemplate.update(
+                "DELETE FROM chat.conversation_document WHERE conversation_id = ?", conversationId);
+        if (!documentIds.isEmpty()) {
+            jdbcTemplate.batchUpdate(
+                    """
+                    INSERT INTO chat.conversation_document (conversation_id, document_id, created_at)
+                    VALUES (?, ?, ?)
+                    """,
+                    new BatchPreparedStatementSetter() {
+                        @Override
+                        public void setValues(PreparedStatement ps, int i) throws SQLException {
+                            ps.setObject(1, conversationId);
+                            ps.setObject(2, documentIds.get(i));
+                            ps.setTimestamp(3, Timestamp.from(updatedAt));
+                        }
+
+                        @Override
+                        public int getBatchSize() {
+                            return documentIds.size();
+                        }
+                    });
+        }
+        conversation.touch(updatedAt);
+        conversations.flush();
+        return conversation.toDomain(List.copyOf(documentIds));
+    }
+
+    @Override
+    @Transactional
+    public void recordMessageDocuments(
+            UUID conversationId,
+            UUID ownerId,
+            UUID messageId,
+            List<MessageDocumentEntry> entries,
+            Instant createdAt) {
+        lockConversation(conversationId, ownerId);
+        messages.findByIdAndConversationId(messageId, conversationId)
+                .orElseThrow(ConversationNotFoundException::new);
+        List<MessageDocumentEntity> entities =
+                entries.stream()
+                        .map(
+                                entry ->
+                                        new MessageDocumentEntity(
+                                                UUID.randomUUID(),
+                                                messageId,
+                                                entry.documentId(),
+                                                entry.chunkId(),
+                                                entry.relation(),
+                                                entry.score(),
+                                                createdAt))
+                        .toList();
+        messageDocuments.saveAllAndFlush(entities);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, List<MessageDocumentRef>> findCitationsForMessages(
+            Collection<UUID> messageIds) {
+        if (messageIds.isEmpty()) {
+            return Map.of();
+        }
+        return messageDocuments.findAllByMessageIdInOrderByMessageIdAsc(messageIds).stream()
+                .collect(
+                        Collectors.groupingBy(
+                                MessageDocumentEntity::getMessageId,
+                                LinkedHashMap::new,
+                                Collectors.mapping(
+                                        entity ->
+                                                new MessageDocumentRef(
+                                                        entity.getDocumentId(),
+                                                        entity.getChunkId(),
+                                                        entity.getRelation(),
+                                                        entity.getScore()),
+                                        Collectors.toList())));
+    }
+
+    private List<UUID> selectedDocumentIds(UUID conversationId) {
+        return jdbcTemplate.query(
+                """
+                SELECT document_id FROM chat.conversation_document
+                WHERE conversation_id = ? ORDER BY created_at
+                """,
+                (rs, rowNum) -> rs.getObject("document_id", UUID.class),
+                conversationId);
+    }
+
+    private Map<UUID, List<UUID>> selectedDocumentIdsByConversation(
+            Collection<UUID> conversationIds) {
+        if (conversationIds.isEmpty()) {
+            return Map.of();
+        }
+        UUID[] conversationIdArray = conversationIds.toArray(new UUID[0]);
+        return jdbcTemplate.query(
+                """
+                SELECT conversation_id, document_id FROM chat.conversation_document
+                WHERE conversation_id = ANY(?) ORDER BY conversation_id, created_at
+                """,
+                ps -> ps.setArray(1, ps.getConnection().createArrayOf("uuid", conversationIdArray)),
+                rs -> {
+                    Map<UUID, List<UUID>> result = new LinkedHashMap<>();
+                    while (rs.next()) {
+                        UUID conversationId = rs.getObject("conversation_id", UUID.class);
+                        UUID documentId = rs.getObject("document_id", UUID.class);
+                        result.computeIfAbsent(conversationId, key -> new ArrayList<>())
+                                .add(documentId);
+                    }
+                    return result;
+                });
     }
 
     private ConversationEntity lockConversation(UUID conversationId, UUID ownerId) {

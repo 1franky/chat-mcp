@@ -3,6 +3,8 @@ package com.aidatachat.adapters.out.persistence.rag;
 import com.aidatachat.application.port.out.DocumentRepository;
 import com.aidatachat.domain.model.Document;
 import com.aidatachat.domain.model.DocumentStatus;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -28,6 +30,17 @@ public class DocumentJpaAdapter implements DocumentRepository {
     @Transactional(readOnly = true)
     public Optional<Document> findByIdAndOwnerId(UUID documentId, UUID ownerId) {
         return documents.findByIdAndOwnerId(documentId, ownerId).map(DocumentEntity::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Document> findAllByIdsAndOwnerId(Collection<UUID> documentIds, UUID ownerId) {
+        if (documentIds.isEmpty()) {
+            return List.of();
+        }
+        return documents.findAllByIdInAndOwnerId(documentIds, ownerId).stream()
+                .map(DocumentEntity::toDomain)
+                .toList();
     }
 
     @Override

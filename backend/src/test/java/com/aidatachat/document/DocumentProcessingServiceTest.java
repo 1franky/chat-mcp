@@ -70,7 +70,8 @@ class DocumentProcessingServiceTest {
         assertThat(result.failureReason()).isNull();
 
         List<VectorMatch> matches =
-                vectorSearch.search(OWNER, new float[FakeEmbeddingProviderAdapter.DIMENSION], 10);
+                vectorSearch.search(
+                        OWNER, List.of(id), new float[FakeEmbeddingProviderAdapter.DIMENSION], 10);
         assertThat(matches).hasSize(result.chunkCount());
 
         verify(audit)
@@ -263,7 +264,10 @@ class DocumentProcessingServiceTest {
         assertThat(documents.findByIdAndOwnerId(id, OWNER)).isEmpty();
         assertThat(
                         vectorSearch.search(
-                                OWNER, new float[FakeEmbeddingProviderAdapter.DIMENSION], 10))
+                                OWNER,
+                                List.of(id),
+                                new float[FakeEmbeddingProviderAdapter.DIMENSION],
+                                10))
                 .isEmpty();
     }
 

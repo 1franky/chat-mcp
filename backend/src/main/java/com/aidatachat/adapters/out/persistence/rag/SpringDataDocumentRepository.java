@@ -1,6 +1,8 @@
 package com.aidatachat.adapters.out.persistence.rag;
 
 import com.aidatachat.domain.model.DocumentStatus;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -11,6 +13,8 @@ import org.springframework.data.jpa.repository.Query;
 public interface SpringDataDocumentRepository extends JpaRepository<DocumentEntity, UUID> {
 
     Optional<DocumentEntity> findByIdAndOwnerId(UUID id, UUID ownerId);
+
+    List<DocumentEntity> findAllByIdInAndOwnerId(Collection<UUID> ids, UUID ownerId);
 
     Optional<DocumentEntity> findByOwnerIdAndContentHash(UUID ownerId, String contentHash);
 
