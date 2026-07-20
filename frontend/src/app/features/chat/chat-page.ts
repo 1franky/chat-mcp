@@ -22,6 +22,8 @@ import {
 } from '../../core/chat/chat.models';
 import { chatErrorMessage, ChatService } from '../../core/chat/chat.service';
 import { renderSafeMarkdown } from '../../core/chat/safe-markdown';
+import { DocumentView } from '../../core/documents/documents.models';
+import { DocumentsService } from '../../core/documents/documents.service';
 import {
   CapabilityAvailability,
   ProviderConnection,
@@ -38,6 +40,7 @@ import { ProviderService } from '../../core/providers/provider.service';
 export class ChatPage {
   private readonly chat = inject(ChatService);
   private readonly providerApi = inject(ProviderService);
+  private readonly documentsApi = inject(DocumentsService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -50,6 +53,8 @@ export class ChatPage {
   protected readonly messages = signal<ConversationMessage[]>([]);
   protected readonly providers = signal<ProviderConnection[]>([]);
   protected readonly models = signal<ProviderModel[]>([]);
+  protected readonly documents = signal<DocumentView[]>([]);
+  protected readonly documentsPanelOpen = signal(false);
   protected readonly mcp = signal<McpSummary | null>(null);
   protected readonly integrationMode = signal('fake');
   protected readonly loadingConversations = signal(true);
@@ -101,6 +106,7 @@ export class ChatPage {
       }
     });
     this.loadProviders();
+    this.loadDocuments();
     this.loadConversations('');
     this.chat
       .systemStatus()
@@ -180,6 +186,30 @@ export class ChatPage {
 
   protected modelChanged(): void {
     this.persistSelection();
+  }
+
+  protected isDocumentSelected(documentId: string): boolean {
+    return this.activeConversation()?.selectedDocumentIds.includes(documentId) ?? false;
+  }
+
+  protected toggleDocument(documentId: string): void {
+    const conversation = this.activeConversation();
+    if (!conversation) {
+      return;
+    }
+    const next = conversation.selectedDocumentIds.includes(documentId)
+      ? conversation.selectedDocumentIds.filter((id) => id !== documentId)
+      : [...conversation.selectedDocumentIds, documentId];
+    this.chat
+      .selectDocuments(conversation.id, next)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (updated) => {
+          this.activeConversation.set(updated);
+          this.upsertConversation(updated);
+        },
+        error: (error) => this.fail(error),
+      });
   }
 
   protected send(): void {
@@ -424,6 +454,12 @@ export class ChatPage {
       this.finishGeneration();
       this.loadConversations(this.searchControl.value);
     }
+    if (event.type === 'complete' || event.type === 'cancelled') {
+      const conversation = this.activeConversation();
+      if (conversation) {
+        this.loadMessages(conversation.id);
+      }
+    }
     this.scrollToBottom();
   }
 
@@ -517,6 +553,16 @@ export class ChatPage {
             this.loadModels(preferred.id, preferred.defaultModelId ?? undefined, false);
           }
         },
+        error: (error) => this.fail(error),
+      });
+  }
+
+  private loadDocuments(): void {
+    this.documentsApi
+      .list()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (page) => this.documents.set(page.items),
         error: (error) => this.fail(error),
       });
   }

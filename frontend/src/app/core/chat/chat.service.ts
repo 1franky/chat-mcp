@@ -40,6 +40,10 @@ export class ChatService {
     });
   }
 
+  selectDocuments(id: string, documentIds: string[]): Observable<Conversation> {
+    return this.http.put<Conversation>(`/api/conversations/${id}/documents`, { documentIds });
+  }
+
   delete(id: string): Observable<void> {
     return this.http.delete<void>(`/api/conversations/${id}`);
   }

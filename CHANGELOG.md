@@ -4,6 +4,19 @@ Todos los cambios relevantes del proyecto se documentan aquí. El formato sigue 
 
 ## [Unreleased]
 
+### Added — Sprint 5 RAG: UI de documentos y selector en el chat (2026-07-19)
+
+- Nueva pantalla `/settings/documents`: subir, listar (con polling de estado cada 3s mientras haya documentos `UPLOADED`/`PROCESSING`/`DELETING`) y eliminar documentos propios.
+- Panel de selección de documentos en el composer del chat (checkboxes, solo `READY` seleccionables) y tarjetas de cita bajo las respuestas fundamentadas en documentos.
+- `chat.models.ts`/`chat.service.ts` ganan `CitationView`, `Conversation.selectedDocumentIds`, `ConversationMessage.citations` y `selectDocuments()`.
+- Cierra el Sprint 5 end-to-end (backend + frontend). Puramente frontend salvo el fix de backend descrito abajo, descubierto durante la verificación manual de esta UI.
+
+### Fixed — Selección de documentos rota bajo `APP_INTEGRATIONS_MODE=fake` (2026-07-19)
+
+- Seleccionar un documento en una conversación devolvía siempre `409` en el modo por defecto de `docker compose` (`fake`): `DocumentRepository`/`VectorSearchPort` eran adaptadores en memoria en ese modo, así que un documento subido nunca llegaba a existir en `rag.document` (Postgres real), pero `chat.conversation_document` tiene una FK real hacia esa tabla.
+- `DocumentJpaAdapter`, `FilesystemDocumentStorageAdapter` y `PgVectorSearchAdapter` pasan a estar siempre activos (mismo criterio que `FakeEmbeddingProviderAdapter`: persistencia local, sin coste, nada que alternar bajo `mode=fake`). Los tres beans fake correspondientes se retiran de `ApplicationBeansConfiguration` (las clases siguen existiendo para tests unitarios).
+- Verificado manualmente end-to-end contra el stack real de `docker compose`: subir, esperar `READY`, seleccionar, preguntar y confirmar cita persistida — ya sin `409`. `./mvnw verify` completo en verde.
+
 ### Added — Sprint 5 RAG: retrieval y citas, solo backend (2026-07-18)
 
 - Retrieval **opt-in por conversación**: `ChatUseCase.selectDocuments`/`PUT /api/conversations/{id}/documents` (tabla-hija `chat.conversation_document`, `V8`). Sin selección, cero latencia extra y cero llamadas a embeddings — comportamiento del chat idéntico al de antes de esta tarea.

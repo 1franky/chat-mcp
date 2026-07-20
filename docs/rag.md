@@ -7,11 +7,12 @@ el esquema de base de datos y `EmbeddingProviderPort`; el mismo día aprobó los
 fake para `DocumentRepository`, `DocumentStoragePort` y `VectorSearchPort`; después el endpoint de
 subida `POST /api/documents` con sus protecciones; el mismo 2026-07-18 aprobó primero extracción,
 normalización y chunking (documento `UPLOADED` → `READY` con chunks y embeddings reales sobre el
-fake indexados), y después, con una segunda luz verde el mismo día, **retrieval y citas — solo
-backend**. Un chat puede ahora seleccionar documentos por conversación y recibir respuestas
-fundamentadas en ellos con citas persistidas; lo que falta es exclusivamente la UI (selector de
-documentos en el composer del chat y el panel `/knowledge` — nunca se construyó ninguna pantalla de
-documentos en el frontend todavía). No inicies esa UI sin luz verde explícita — ver `TASKS.md`.
+fake indexados), y después, con una segunda luz verde el mismo día, retrieval y citas (backend). El
+2026-07-19, tras una nueva luz verde, se cerró el sprint con la UI: panel `/settings/documents`
+(subir/listar con polling de estado/eliminar) y, dentro del chat, un selector de documentos por
+conversación en el composer y tarjetas de cita bajo las respuestas fundamentadas. Sprint 5 queda
+completo end-to-end. Ver "Bug corregido: documentos siempre reales" más abajo para un defecto de
+backend descubierto y arreglado durante la verificación manual de esta UI.
 
 ### Esquema `rag` (migraciones `V6`/`V7`)
 
@@ -107,9 +108,12 @@ backend que usa SQL directo en lugar de un repositorio Spring Data. Decisiones d
   el historial de un chat.
 - Nuevo dominio `DocumentChunk` (2026-07-18): mapea 1:1 el CHECK de `rag.document_chunk`.
 
-Los seis adaptadores (`DocumentJpaAdapter`, `FilesystemDocumentStorageAdapter`,
-`PgVectorSearchAdapter` y sus tres fakes) son beans condicionales por `app.integrations.mode` en
-`ApplicationBeansConfiguration`, igual que `EmbeddingProviderPort`/`LlmProviderPort`.
+`DocumentJpaAdapter`, `FilesystemDocumentStorageAdapter` y `PgVectorSearchAdapter` **están siempre
+activos, sin `@ConditionalOnProperty` sobre `app.integrations.mode`** desde el 2026-07-19 (ver
+"Bug corregido: documentos siempre reales" más abajo) — persistir un documento o un vector es local y
+gratis, igual que `EmbeddingProviderPort`. Los tres fakes en memoria (`FakeDocumentRepository`,
+`FakeDocumentStorageAdapter`, `FakeVectorSearchAdapter`) siguen existiendo como implementaciones
+usadas directamente por tests unitarios, pero ya no se registran como beans de Spring.
 
 Verificado el 2026-07-17: 17 tests unitarios (fakes + `FilesystemDocumentStorageAdapterTest` con
 `@TempDir`, incluye aislamiento por owner y neutralización de segmentos `..`) y 9 tests de
@@ -358,12 +362,33 @@ para `V8`, `ChatIntegrationTest` ampliado (flujo completo seleccionar documento 
 citas persistidas end-to-end contra Postgres real, y que borrar un chunk citado ya no rompe el CHECK
 tras el fix del FK). `./mvnw verify` completo del backend en verde (176/176).
 
+### Bug corregido: documentos siempre reales (2026-07-19)
+
+Al construir la UI del selector de documentos se descubrió, verificando manualmente contra el stack
+de `docker compose` real (que arranca con `APP_INTEGRATIONS_MODE=fake`, el default documentado para
+pruebas locales gratuitas), que **seleccionar cualquier documento en una conversación devolvía
+siempre 409**. Causa: en modo `fake`, `DocumentRepository`/`VectorSearchPort` eran los adaptadores en
+memoria (`FakeDocumentRepository`/`FakeVectorSearchAdapter`), así que un documento subido nunca
+llegaba a existir como fila real en `rag.document` — pero `chat.conversation_document` (añadida en la
+tarea de retrieval) tiene una FK real hacia `rag.document(id)`, y `ConversationRepository` siempre usa
+Postgres real. La inserción de la selección violaba la FK en cuanto se intentaba. Enmascarado en
+`ChatIntegrationTest` porque ese test sembraba manualmente tanto Postgres real (para la FK) como los
+beans fake (para que `RagRetrievalService`/`selectDocuments` encontraran el documento) — un truco de
+test que nunca podía ocurrir en la app real.
+
+Fix: `DocumentJpaAdapter`, `FilesystemDocumentStorageAdapter` y `PgVectorSearchAdapter` pasan a estar
+siempre activos (mismo `@ConditionalOnProperty` que ya tenía `FakeEmbeddingProviderAdapter` — no hay
+coste ni red de por medio, solo Postgres/filesystem locales), eliminando de paso los tres beans fake
+correspondientes en `ApplicationBeansConfiguration` (las clases fake siguen existiendo, usadas
+directamente por tests unitarios). `ChatIntegrationTest` se simplificó para sembrar únicamente vía
+JDBC real (ya no necesita el doble sembrado). Verificado manualmente contra el stack de
+`docker compose` (modo fake, el default): subir un documento vía `POST /api/documents`, esperar a
+`READY` por polling, seleccionar vía `PUT /api/conversations/{id}/documents` (ya no 409), enviar un
+mensaje relacionado con el contenido del documento y confirmar una cita persistida en la respuesta.
+`./mvnw verify` completo del backend en verde tras el fix.
+
 ## Pendiente de aprobación
 
-- Selector de documentos en el composer del chat, estado de indexación visible, citas en los
-  mensajes del frontend y panel `/knowledge` (backend ya listo: `PUT /api/conversations/{id}/documents`,
-  `GET /api/documents` para listar candidatos, `MessageView.citations`) — nunca se construyó ninguna
-  pantalla de documentos en el frontend todavía.
 - Endpoint `POST /api/documents/{id}/reindex`.
 - Adaptador real de `EmbeddingProviderPort` (OpenAI embeddings u otro proveedor).
 - Full-text search híbrido combinado con la búsqueda vectorial ya implementada.

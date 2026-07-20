@@ -178,6 +178,24 @@
                   @if (message.status === 'STREAMING') {
                     <span class="stream-cursor" aria-label="Generando"></span>
                   }
+                  @if (message.citations.length) {
+                    <div class="citation-list" aria-label="Fuentes citadas">
+                      @for (citation of message.citations; track citation.chunkId) {
+                        <div class="citation-card">
+                          <div class="citation-card__header">
+                            <strong>{{ citation.documentName }}</strong>
+                            @if (citation.pageNumber !== null) {
+                              <span>Pagina {{ citation.pageNumber }}</span>
+                            }
+                            @if (citation.sectionLabel) {
+                              <span>{{ citation.sectionLabel }}</span>
+                            }
+                          </div>
+                          <p class="citation-card__snippet">{{ citation.snippet }}</p>
+                        </div>
+                      }
+                    </div>
+                  }
                 } @else {
                   <p class="user-content">{{ message.content }}</p>
                 }
@@ -245,6 +263,48 @@
             </span>
           }
         </div>
+        @if (activeConversation(); as conversation) {
+          <div class="documents-selector">
+            <button
+              type="button"
+              class="documents-toggle"
+              (click)="documentsPanelOpen.set(!documentsPanelOpen())"
+            >
+              Documentos
+              @if (conversation.selectedDocumentIds.length) {
+                · {{ conversation.selectedDocumentIds.length }}
+              }
+            </button>
+            @if (documentsPanelOpen()) {
+              <div class="documents-panel" aria-label="Seleccionar documentos para contexto">
+                @if (documents().length) {
+                  @for (document of documents(); track document.id) {
+                    <label
+                      class="documents-panel__item"
+                      [class.documents-panel__item--disabled]="document.status !== 'READY'"
+                    >
+                      <input
+                        type="checkbox"
+                        [checked]="isDocumentSelected(document.id)"
+                        [disabled]="document.status !== 'READY'"
+                        (change)="toggleDocument(document.id)"
+                      />
+                      <span>{{ document.originalFilename }}</span>
+                      @if (document.status !== 'READY') {
+                        <span class="status" [attr.data-status]="document.status">
+                          {{ document.status }}
+                        </span>
+                      }
+                    </label>
+                  }
+                } @else {
+                  <p class="documents-panel__empty">No hay documentos todavia.</p>
+                }
+                <a routerLink="/settings/documents">Gestionar documentos</a>
+              </div>
+            }
+          </div>
+        }
         <a class="mcp-state" [attr.data-state]="mcp()?.state ?? 'DOWN'" routerLink="/settings/mcp">
           MCP {{ integrationMode().toUpperCase() }} {{ mcp()?.state ?? 'SIN DATOS' }} · ver estado
         </a>

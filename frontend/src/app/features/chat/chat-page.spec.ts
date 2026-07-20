@@ -45,6 +45,7 @@ describe('ChatPage', () => {
     http.expectOne('/api/conversations/conversation-1').flush(conversation());
     http.expectOne('/api/providers/provider-1/models').flush([model()]);
     http.expectOne('/api/conversations/conversation-1/messages').flush([]);
+    http.expectOne('/api/documents?page=0&size=50').flush(documentPage());
     providersRequest.flush([provider()]);
     fixture.detectChanges();
 
@@ -93,6 +94,7 @@ describe('ChatPage', () => {
     http.expectOne('/api/conversations/conversation-1').flush(conversation());
     http.expectOne('/api/providers/provider-1/models').flush([model()]);
     http.expectOne('/api/conversations/conversation-1/messages').flush([]);
+    http.expectOne('/api/documents?page=0&size=50').flush(documentPage());
     providersRequest.flush([provider()]);
     fixture.detectChanges();
 
@@ -128,9 +130,14 @@ function conversation(id = 'conversation-1', title = 'Prueba') {
     title,
     providerConnectionId: 'provider-1',
     modelId: 'fake-chat-v1',
+    selectedDocumentIds: [],
     createdAt: '2026-07-15T00:00:00Z',
     updatedAt: '2026-07-15T00:00:00Z',
   };
+}
+
+function documentPage() {
+  return { items: [], page: 0, size: 50, totalElements: 0, totalPages: 0 };
 }
 
 function provider() {

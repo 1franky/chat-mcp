@@ -1,12 +1,9 @@
 package com.aidatachat.configuration;
 
 import com.aidatachat.adapters.out.extraction.DocumentTextExtractorAdapter;
-import com.aidatachat.adapters.out.fake.FakeDocumentRepository;
-import com.aidatachat.adapters.out.fake.FakeDocumentStorageAdapter;
 import com.aidatachat.adapters.out.fake.FakeEmbeddingProviderAdapter;
 import com.aidatachat.adapters.out.fake.FakeLlmProviderAdapter;
 import com.aidatachat.adapters.out.fake.FakeMcpGateway;
-import com.aidatachat.adapters.out.fake.FakeVectorSearchAdapter;
 import com.aidatachat.adapters.out.mcp.McpAuthProvider;
 import com.aidatachat.adapters.out.mcp.McpDestinationPolicy;
 import com.aidatachat.adapters.out.mcp.McpHttpClient;
@@ -109,48 +106,29 @@ public class ApplicationBeansConfiguration {
         return new FakeEmbeddingProviderAdapter();
     }
 
+    /**
+     * Document/vector persistence is always the real Postgres/pgvector-backed adapter, regardless
+     * of {@code app.integrations.mode}: unlike an LLM provider or MCP call, storing a document row
+     * or a chunk's embedding vector is local and free, so there is nothing to protect a "fake" mode
+     * from — same rationale as {@link #fakeEmbeddingProviderAdapter()}/{@link
+     * #documentTextExtractorAdapter}. {@code chat.conversation_document} and {@code
+     * rag.message_document} carry real foreign keys to {@code rag.document}/{@code
+     * rag.document_chunk}, so a document created under an in-memory fake would be invisible to
+     * those constraints the moment it is selected in a conversation — this used to 409 on every
+     * document selection under the {@code fake} mode that {@code compose.yaml} defaults to.
+     */
     @Bean
-    @ConditionalOnProperty(
-            name = "app.integrations.mode",
-            havingValue = "fake",
-            matchIfMissing = true)
-    FakeDocumentRepository fakeDocumentRepository() {
-        return new FakeDocumentRepository();
-    }
-
-    @Bean
-    @ConditionalOnProperty(
-            name = "app.integrations.mode",
-            havingValue = "fake",
-            matchIfMissing = true)
-    FakeDocumentStorageAdapter fakeDocumentStorageAdapter() {
-        return new FakeDocumentStorageAdapter();
-    }
-
-    @Bean
-    @ConditionalOnProperty(
-            name = "app.integrations.mode",
-            havingValue = "fake",
-            matchIfMissing = true)
-    FakeVectorSearchAdapter fakeVectorSearchAdapter() {
-        return new FakeVectorSearchAdapter();
-    }
-
-    @Bean
-    @ConditionalOnProperty(name = "app.integrations.mode", havingValue = "real")
     DocumentJpaAdapter documentJpaAdapter(SpringDataDocumentRepository documents) {
         return new DocumentJpaAdapter(documents);
     }
 
     @Bean
-    @ConditionalOnProperty(name = "app.integrations.mode", havingValue = "real")
     FilesystemDocumentStorageAdapter filesystemDocumentStorageAdapter(
             @Value("${app.rag.storage.path:/var/lib/ai-data-chat/documents}") String basePath) {
         return new FilesystemDocumentStorageAdapter(basePath);
     }
 
     @Bean
-    @ConditionalOnProperty(name = "app.integrations.mode", havingValue = "real")
     PgVectorSearchAdapter pgVectorSearchAdapter(JdbcTemplate jdbcTemplate) {
         return new PgVectorSearchAdapter(jdbcTemplate);
     }
