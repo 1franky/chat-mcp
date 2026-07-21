@@ -6,6 +6,8 @@ import com.aidatachat.application.port.out.LlmProviderPort.ProviderClientConfigu
 import com.aidatachat.domain.model.ChatMessage;
 import com.aidatachat.domain.model.LlmChatRequest;
 import com.aidatachat.domain.model.LlmChunk;
+import com.aidatachat.domain.model.LlmToolCall;
+import com.aidatachat.domain.model.McpToolDefinition;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -18,6 +20,7 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -395,6 +398,127 @@ class ProviderAdaptersTest {
         assertThat(ollama.content()).isEqualTo("Local");
         assertThat(ollama.chunks.getLast().inputTokens()).isEqualTo(5);
         assertThat(ollama.chunks.getLast().outputTokens()).isEqualTo(1);
+    }
+
+    @Test
+    void chatCompletionsProvidersNormalizeToolCallStreamingEvents() throws Exception {
+        String toolCallStream =
+                """
+                data: {"id":"chat-tools","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"health_check","arguments":""}}]},"finish_reason":null}]}
+
+                data: {"id":"chat-tools","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"a\\":1}"}}]},"finish_reason":null}]}
+
+                data: {"id":"chat-tools","choices":[{"delta":{},"finish_reason":"tool_calls"}]}
+
+                """;
+        server.createContext(
+                "/minimax-tools/chat/completions",
+                exchange -> sendStream(exchange, "text/event-stream", toolCallStream));
+        server.createContext(
+                "/byteplus-tools/chat/completions",
+                exchange -> sendStream(exchange, "text/event-stream", toolCallStream));
+        server.createContext(
+                "/compatible-tools/chat/completions",
+                exchange -> sendStream(exchange, "text/event-stream", toolCallStream));
+        LlmChatRequest request = request("model-test");
+        ProviderDestinationPolicy policy = new ProviderDestinationPolicy("127.0.0.1", "127.0.0.1");
+        ChunkSubscriber miniMax = new ChunkSubscriber();
+        ChunkSubscriber bytePlus = new ChunkSubscriber();
+        ChunkSubscriber compatible = new ChunkSubscriber();
+
+        new MiniMaxProviderAdapter(http, policy)
+                .streamChat(
+                        new ProviderClientConfiguration(
+                                baseUrl + "/minimax-tools", null, null, null, null, "model-test"),
+                        "key".toCharArray(),
+                        request)
+                .subscribe(miniMax);
+        new BytePlusProviderAdapter(http, Map.of("test", baseUrl + "/byteplus-tools"))
+                .streamChat(
+                        new ProviderClientConfiguration(
+                                null, "test", null, null, null, "model-test"),
+                        "key".toCharArray(),
+                        request)
+                .subscribe(bytePlus);
+        new OpenAiCompatibleProviderAdapter(http, policy)
+                .streamChat(
+                        new ProviderClientConfiguration(
+                                baseUrl + "/compatible-tools",
+                                null,
+                                null,
+                                null,
+                                "/chat/completions",
+                                "model-test"),
+                        "key".toCharArray(),
+                        request)
+                .subscribe(compatible);
+
+        assertThat(miniMax.finished.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(bytePlus.finished.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(compatible.finished.await(2, TimeUnit.SECONDS)).isTrue();
+        for (ChunkSubscriber subscriber : List.of(miniMax, bytePlus, compatible)) {
+            assertThat(subscriber.failure).isNull();
+            assertThat(subscriber.chunks)
+                    .flatExtracting(LlmChunk::toolCalls)
+                    .extracting(delta -> delta.toolName())
+                    .contains("health_check");
+            assertThat(subscriber.chunks.getLast().finishReason()).isEqualTo("tool_calls");
+        }
+    }
+
+    @Test
+    void chatCompletionsProvidersSerializeToolsAndToolRoundTrip() throws Exception {
+        AtomicReference<String> capturedBody = new AtomicReference<>();
+        server.createContext(
+                "/minimax-round/chat/completions",
+                exchange -> {
+                    capturedBody.set(
+                            new String(
+                                    exchange.getRequestBody().readAllBytes(),
+                                    StandardCharsets.UTF_8));
+                    sendStream(
+                            exchange,
+                            "text/event-stream",
+                            """
+                            data: {"id":"chat-round","choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}
+
+                            """);
+                });
+        McpToolDefinition tool =
+                new McpToolDefinition(
+                        "health_check", "Reports liveness", Map.of("type", "object"), true);
+        LlmToolCall toolCall = new LlmToolCall("call_1", "health_check", Map.of());
+        LlmChatRequest request =
+                new LlmChatRequest(
+                        "model-test",
+                        List.of(
+                                new ChatMessage("user", "ping"),
+                                new ChatMessage("assistant", "", List.of(toolCall), null, null),
+                                new ChatMessage(
+                                        "tool",
+                                        "{\"ok\":true}",
+                                        List.of(),
+                                        "call_1",
+                                        "health_check")),
+                        List.of(tool));
+        ChunkSubscriber subscriber = new ChunkSubscriber();
+
+        new MiniMaxProviderAdapter(http, new ProviderDestinationPolicy("127.0.0.1", "127.0.0.1"))
+                .streamChat(
+                        new ProviderClientConfiguration(
+                                baseUrl + "/minimax-round", null, null, null, null, "model-test"),
+                        "key".toCharArray(),
+                        request)
+                .subscribe(subscriber);
+
+        assertThat(subscriber.finished.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(subscriber.failure).isNull();
+        String body = capturedBody.get();
+        assertThat(body).contains("\"tools\"");
+        assertThat(body).contains("\"name\":\"health_check\"");
+        assertThat(body).contains("\"tool_calls\"");
+        assertThat(body).contains("\"tool_call_id\":\"call_1\"");
+        assertThat(body).contains("\"role\":\"tool\"");
     }
 
     private ProviderClientConfiguration config() {

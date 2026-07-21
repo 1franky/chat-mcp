@@ -4,9 +4,13 @@
 
 El chat implementa conversaciones propias, mensajes persistentes, busqueda por titulo,
 renombrado, borrado, cambio de proveedor/modelo para respuestas futuras, regeneracion, streaming y
-cancelacion (Sprint 3). Sprint 4 anade tool calling multi-proveedor (solo OpenAI y Anthropic) contra
-un cliente MCP Streamable HTTP real, con orquestacion de rondas en el backend — ver
-`docs/mcp-integration.md` y ADR-0009. Desde 2026-07-18 (Sprint 5), una conversacion puede seleccionar
+cancelacion (Sprint 3). Sprint 4 anade tool calling multi-proveedor contra un cliente MCP Streamable
+HTTP real, con orquestacion de rondas en el backend — ver `docs/mcp-integration.md` y ADR-0009.
+Inicialmente solo OpenAI y Anthropic serializaban `tools`/`tool_calls`; desde 2026-07-21 tambien lo
+hacen MiniMax, BytePlus y OpenAI-compatible en su variante Chat Completions (mismo formato de wire
+que OpenAI, ver `docs/providers.md`). Ollama queda fuera: su formato real de `tool_calls` difiere
+(argumentos como objeto, no como texto JSON) y el soporte varia por modelo local. Desde 2026-07-18
+(Sprint 5), una conversacion puede seleccionar
 documentos propios (`PUT .../documents`) para retrieval RAG opt-in: sin seleccion, el chat funciona
 igual que antes; con seleccion, cada mensaje recupera chunks relevantes y la respuesta persiste citas
 — ver `docs/rag.md`. Desde 2026-07-19 el composer incluye un panel de seleccion de documentos y las

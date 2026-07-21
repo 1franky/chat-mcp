@@ -7,6 +7,7 @@ import com.aidatachat.domain.model.LlmChunk;
 import com.aidatachat.domain.model.LlmToolCall;
 import com.aidatachat.domain.model.LlmToolCallDelta;
 import com.aidatachat.domain.model.McpToolDefinition;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Flow;
@@ -96,8 +97,11 @@ final class ProviderStreamingSupport {
         if (maxTokens > 0) {
             body.put("max_tokens", maxTokens);
         }
+        if (!request.tools().isEmpty()) {
+            body.set("tools", toolsForChatCompletions(request.tools()));
+        }
         ArrayNode messages = body.putArray("messages");
-        addMessages(messages, request);
+        addChatCompletionsMessages(messages, request);
         return body;
     }
 
@@ -186,6 +190,10 @@ final class ProviderStreamingSupport {
         JsonNode usage = event.path("usage");
         if (choices.isArray() && !choices.isEmpty()) {
             JsonNode choice = choices.get(0);
+            JsonNode toolCalls = choice.path("delta").path("tool_calls");
+            if (toolCalls.isArray() && !toolCalls.isEmpty()) {
+                return LlmChunk.toolCallDelta(toolCallDeltas(toolCalls), frame.requestId());
+            }
             String content = choice.path("delta").path("content").asText("");
             String finishReason = choice.path("finish_reason").asText(null);
             if (!content.isEmpty()) {
@@ -300,6 +308,34 @@ final class ProviderStreamingSupport {
         }
     }
 
+    private static void addChatCompletionsMessages(ArrayNode target, LlmChatRequest request) {
+        for (ChatMessage message : request.messages()) {
+            if ("tool".equals(message.role())) {
+                ObjectNode toolMessage = target.addObject();
+                toolMessage.put("role", "tool");
+                toolMessage.put("tool_call_id", message.toolCallId());
+                toolMessage.put("content", message.content());
+                continue;
+            }
+            if (!message.toolCalls().isEmpty()) {
+                ObjectNode assistantMessage = target.addObject();
+                assistantMessage.put("role", message.role());
+                assistantMessage.put("content", message.content());
+                ArrayNode toolCalls = assistantMessage.putArray("tool_calls");
+                for (LlmToolCall toolCall : message.toolCalls()) {
+                    ObjectNode call = toolCalls.addObject();
+                    call.put("id", toolCall.id());
+                    call.put("type", "function");
+                    ObjectNode function = call.putObject("function");
+                    function.put("name", toolCall.name());
+                    function.put("arguments", JSON.valueToTree(toolCall.arguments()).toString());
+                }
+                continue;
+            }
+            target.addObject().put("role", message.role()).put("content", message.content());
+        }
+    }
+
     private static void addResponsesMessages(ArrayNode target, LlmChatRequest request) {
         for (ChatMessage message : request.messages()) {
             if ("tool".equals(message.role())) {
@@ -382,6 +418,33 @@ final class ProviderStreamingSupport {
             node.set("input_schema", JSON.valueToTree(tool.inputSchema()));
         }
         return array;
+    }
+
+    private static ArrayNode toolsForChatCompletions(List<McpToolDefinition> tools) {
+        ArrayNode array = JsonNodeFactory.instance.arrayNode();
+        for (McpToolDefinition tool : tools) {
+            ObjectNode node = array.addObject();
+            node.put("type", "function");
+            ObjectNode function = node.putObject("function");
+            function.put("name", tool.name());
+            function.put("description", tool.description());
+            function.set("parameters", JSON.valueToTree(tool.inputSchema()));
+        }
+        return array;
+    }
+
+    private static List<LlmToolCallDelta> toolCallDeltas(JsonNode toolCalls) {
+        List<LlmToolCallDelta> deltas = new ArrayList<>();
+        for (JsonNode call : toolCalls) {
+            JsonNode function = call.path("function");
+            deltas.add(
+                    new LlmToolCallDelta(
+                            call.path("index").asInt(0),
+                            call.path("id").asText(null),
+                            function.path("name").asText(null),
+                            function.path("arguments").asText("")));
+        }
+        return deltas;
     }
 
     private static boolean hasFunctionCall(JsonNode output) {

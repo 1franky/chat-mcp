@@ -23,7 +23,7 @@ public final class MiniMaxProviderAdapter extends AbstractHttpLlmProviderAdapter
             new ProviderCapabilityProfile(
                     CapabilityAvailability.SUPPORTED,
                     CapabilityAvailability.SUPPORTED,
-                    CapabilityAvailability.UNKNOWN,
+                    CapabilityAvailability.SUPPORTED,
                     CapabilityAvailability.UNKNOWN,
                     CapabilityAvailability.UNKNOWN,
                     CapabilityAvailability.UNKNOWN,

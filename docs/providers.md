@@ -24,6 +24,13 @@ puede usar Responses según su ruta configurada. Todos se traducen a un stream i
 contenido, terminacion, uso, razon y request ID opcionales. Las pruebas de contrato levantan un
 servidor HTTP local y nunca invocan APIs pagadas.
 
+Tool calling (MCP) serializa `tools` en la petición y traduce `tool_calls`/`tool_use` de la
+respuesta para OpenAI, Anthropic, BytePlus, MiniMax y OpenAI-compatible (variante Chat Completions);
+estos tres últimos comparten el mismo formato de wire que OpenAI Chat Completions porque así lo
+documentan sus APIs (fuentes abajo). Ollama no participa: su formato real de `tool_calls` difiere
+(argumentos como objeto, no como texto JSON) y el soporte varía por modelo local — ver
+`docs/mcp-integration.md`.
+
 Fuentes oficiales verificadas el 2026-07-15 (MiniMax verificado el 2026-07-17):
 
 - [OpenAI Models API](https://platform.openai.com/docs/api-reference/models/list)
