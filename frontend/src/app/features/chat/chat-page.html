@@ -102,18 +102,20 @@
       </div>
     </header>
 
-    @if (error()) {
-      <div class="notice notice--error" role="alert">
-        <span>{{ error() }}</span>
-        <button type="button" (click)="error.set('')">Cerrar</button>
-      </div>
-    }
-    @if (notice()) {
-      <div class="notice notice--success" role="status">
-        <span>{{ notice() }}</span>
-        <button type="button" (click)="notice.set('')">Cerrar</button>
-      </div>
-    }
+    <div class="notices">
+      @if (error()) {
+        <div class="notice notice--error" role="alert">
+          <span>{{ error() }}</span>
+          <button type="button" (click)="error.set('')">Cerrar</button>
+        </div>
+      }
+      @if (notice()) {
+        <div class="notice notice--success" role="status">
+          <span>{{ notice() }}</span>
+          <button type="button" (click)="notice.set('')">Cerrar</button>
+        </div>
+      }
+    </div>
 
     <div #messageViewport class="message-viewport" aria-live="polite">
       @if (loadingConversation()) {
