@@ -116,38 +116,56 @@ public final class McpSessionManager {
         JsonNode result = jsonRpc.result(response.body(), "MCP_INITIALIZE_FAILED");
         String negotiatedProtocol = result.path("protocolVersion").asText(protocolVersion);
         String serverVersion = result.path("serverInfo").path("version").asText("unknown");
-        String contractVersion = result.path("_meta").path("contract_version").asText("0.0.0");
-        boolean fake = result.path("_meta").path("fake").asBoolean(false);
         if (response.sessionId() == null) {
             throw new McpCommunicationException("MCP_PROTOCOL_MISMATCH", null, false, null);
         }
-        int contractMajor = majorVersion(contractVersion);
+        sessionId = response.sessionId();
+        http.post(endpoint, this::sessionHeaders, jsonRpc.initializedNotification());
+
+        // The contract version is not part of the initialize handshake; the server reports it as
+        // structured content on the health_check tool, which every MCP server here must expose.
+        McpHealthInfo health = fetchHealth();
+        int contractMajor = majorVersion(health.contractVersion());
         if (contractMajor != requiredContractMajor) {
+            sessionId = null;
             status.set(
                     new McpConnectionStatus(
                             IntegrationState.DOWN,
                             serverVersion,
-                            contractVersion,
+                            health.contractVersion(),
                             negotiatedProtocol,
                             "Contract major mismatch: server="
                                     + contractMajor
                                     + " required="
                                     + requiredContractMajor,
-                            fake));
+                            health.fake()));
             tools.set(List.of());
             throw new McpCommunicationException("MCP_CONTRACT_MISMATCH", null, false, null);
         }
-        sessionId = response.sessionId();
-        http.post(endpoint, this::sessionHeaders, jsonRpc.initializedNotification());
         status.set(
                 new McpConnectionStatus(
                         IntegrationState.UP,
                         serverVersion,
-                        contractVersion,
+                        health.contractVersion(),
                         negotiatedProtocol,
                         "Connected",
-                        fake));
+                        health.fake()));
     }
+
+    private McpHealthInfo fetchHealth() {
+        McpHttpClient.JsonResponse response =
+                http.post(
+                        endpoint,
+                        this::sessionHeaders,
+                        jsonRpc.toolsCallRequest("health_check", Map.of()));
+        JsonNode result = jsonRpc.result(response.body(), "MCP_HEALTH_CHECK_FAILED");
+        JsonNode structuredContent = result.path("structuredContent");
+        String contractVersion = structuredContent.path("contract_version").asText("0.0.0");
+        boolean fake = structuredContent.path("fake").asBoolean(false);
+        return new McpHealthInfo(contractVersion, fake);
+    }
+
+    private record McpHealthInfo(String contractVersion, boolean fake) {}
 
     private void fetchTools() {
         McpHttpClient.JsonResponse response =
