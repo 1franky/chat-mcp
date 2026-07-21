@@ -38,8 +38,12 @@ rechaza por contrato cualquier nombre no permitido, tanto en los dobles como en 
 
 El backend es siempre el único cliente/orquestador MCP — nunca delega la conexión al proveedor LLM
 aunque éste soporte "remote MCP" (ver ADR-0009). `ChatService` ofrece el catálogo de tools
-descubierto solo a los proveedores con `toolCalling=SUPPORTED` (OpenAI y Anthropic en este sprint),
-ejecuta cada llamada en un executor dedicado (`mcpToolOrchestrationExecutor`, nunca en el hilo
+descubierto a cualquier proveedor activo; en la práctica solo lo aprovechan los proveedores cuyo
+adaptador serializa `tools`/`tool_calls` en el payload — OpenAI, Anthropic, MiniMax, BytePlus y
+OpenAI-compatible en su variante Chat Completions (`toolCalling=SUPPORTED` en su
+`ProviderCapabilityProfile`; ver `docs/chat.md`). Ollama ignora `tools` en su body actual y no
+invoca herramientas. El backend ejecuta cada llamada en un executor dedicado
+(`mcpToolOrchestrationExecutor`, nunca en el hilo
 Reactor Netty del stream), aplica timeout por-tool (`MCP_TOOL_CALL_TIMEOUT`) y límite de tamaño de
 resultado (`MAX_TOOL_RESULT_BYTES`), y detiene la generación en `FAILED` si se supera
 `MAX_TOOL_ROUNDS`. Un resultado `isError:true` o bloqueado por el allowlist nunca se presenta como

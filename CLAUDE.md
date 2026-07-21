@@ -11,7 +11,9 @@ deterministic test doubles for LLM/MCP integrations. The full spec lives in
 
 **Current scope (through Sprint 5):** infrastructure, identity, users, encrypted LLM provider
 connections, persistent chat with streaming/cancellation, a real MCP Streamable HTTP client,
-backend-orchestrated tool calling for OpenAI and Anthropic only, and RAG (approved and landed
+backend-orchestrated tool calling for OpenAI, Anthropic, MiniMax, BytePlus, and OpenAI-compatible
+connections using the Chat Completions path (Ollama is explicitly excluded — see `docs/chat.md`),
+and RAG (approved and landed
 2026-07-17 through 2026-07-19 — see `TASKS.md`/`docs/rag.md` for the full history): the `rag` Flyway
 schema, `EmbeddingProviderPort`, real (always-active, see `docs/rag.md` "Bug corregido: documentos
 siempre reales") adapters for `DocumentRepository`/`DocumentStoragePort`/`VectorSearchPort`, the

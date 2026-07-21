@@ -24,7 +24,7 @@ public final class BytePlusProviderAdapter extends AbstractHttpLlmProviderAdapte
             new ProviderCapabilityProfile(
                     CapabilityAvailability.SUPPORTED,
                     CapabilityAvailability.SUPPORTED,
-                    CapabilityAvailability.UNKNOWN,
+                    CapabilityAvailability.SUPPORTED,
                     CapabilityAvailability.UNKNOWN,
                     CapabilityAvailability.UNKNOWN,
                     CapabilityAvailability.UNKNOWN,
