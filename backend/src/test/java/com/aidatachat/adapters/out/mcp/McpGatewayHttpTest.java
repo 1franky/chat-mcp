@@ -54,7 +54,7 @@ class McpGatewayHttpTest {
                     switch (method) {
                         case "initialize" -> {
                             exchange.getResponseHeaders().set("Mcp-Session-Id", "session-1");
-                            send(exchange, 200, initializeResult(body, "1.0.0"));
+                            send(exchange, 200, initializeResult(body, "1.0.0-test"));
                         }
                         case "notifications/initialized" -> send(exchange, 202, "");
                         case "tools/list" -> {
@@ -69,7 +69,11 @@ class McpGatewayHttpTest {
                                 send(exchange, 404, "{}");
                                 return;
                             }
-                            send(exchange, 200, toolCallResult(body, false));
+                            if (isToolCall(body, "health_check")) {
+                                send(exchange, 200, healthCheckResult(body, "1.0.0"));
+                            } else {
+                                send(exchange, 200, toolCallResult(body, false));
+                            }
                         }
                         default -> send(exchange, 400, "{}");
                     }
@@ -80,6 +84,7 @@ class McpGatewayHttpTest {
                 .extracting(tool -> tool.name())
                 .containsExactly("health_check");
         assertThat(session.status().state()).isEqualTo(IntegrationState.UP);
+        assertThat(session.status().contractVersion()).isEqualTo("1.0.0");
         McpToolResult result = session.call("health_check", Map.of());
         assertThat(result.isError()).isFalse();
     }
@@ -90,17 +95,28 @@ class McpGatewayHttpTest {
                 "/mcp",
                 exchange -> {
                     JsonNode body = readBody(exchange);
-                    if ("initialize".equals(body.path("method").asText(""))) {
-                        exchange.getResponseHeaders().set("Mcp-Session-Id", "session-1");
-                        send(exchange, 200, initializeResult(body, "2.0.0"));
-                    } else {
-                        send(exchange, 200, "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}");
+                    String method = body.path("method").asText("");
+                    switch (method) {
+                        case "initialize" -> {
+                            exchange.getResponseHeaders().set("Mcp-Session-Id", "session-1");
+                            send(exchange, 200, initializeResult(body, "1.0.0-test"));
+                        }
+                        case "notifications/initialized" -> send(exchange, 202, "");
+                        case "tools/call" -> {
+                            if (isToolCall(body, "health_check")) {
+                                send(exchange, 200, healthCheckResult(body, "2.0.0"));
+                            } else {
+                                send(exchange, 200, toolCallResult(body, false));
+                            }
+                        }
+                        default -> send(exchange, 400, "{}");
                     }
                 });
         McpSessionManager session = session();
 
         assertThat(session.discoverTools()).isEmpty();
         assertThat(session.status().state()).isEqualTo(IntegrationState.DOWN);
+        assertThat(session.status().contractVersion()).isEqualTo("2.0.0");
     }
 
     @Test
@@ -137,11 +153,17 @@ class McpGatewayHttpTest {
                     switch (method) {
                         case "initialize" -> {
                             exchange.getResponseHeaders().set("Mcp-Session-Id", "session-1");
-                            send(exchange, 200, initializeResult(body, "1.0.0"));
+                            send(exchange, 200, initializeResult(body, "1.0.0-test"));
                         }
                         case "notifications/initialized" -> send(exchange, 202, "");
                         case "tools/list" -> send(exchange, 200, toolsListResult(body));
-                        case "tools/call" -> send(exchange, 200, toolCallResult(body, true));
+                        case "tools/call" -> {
+                            if (isToolCall(body, "health_check")) {
+                                send(exchange, 200, healthCheckResult(body, "1.0.0"));
+                            } else {
+                                send(exchange, 200, toolCallResult(body, true));
+                            }
+                        }
                         default -> send(exchange, 400, "{}");
                     }
                 });
@@ -166,12 +188,14 @@ class McpGatewayHttpTest {
                         case "initialize" -> {
                             String sessionId = "session-" + sessionCounter.incrementAndGet();
                             exchange.getResponseHeaders().set("Mcp-Session-Id", sessionId);
-                            send(exchange, 200, initializeResult(body, "1.0.0"));
+                            send(exchange, 200, initializeResult(body, "1.0.0-test"));
                         }
                         case "notifications/initialized" -> send(exchange, 202, "");
                         case "tools/list" -> send(exchange, 200, toolsListResult(body));
                         case "tools/call" -> {
-                            if (toolCallAttempts.incrementAndGet() == 1) {
+                            if (isToolCall(body, "health_check")) {
+                                send(exchange, 200, healthCheckResult(body, "1.0.0"));
+                            } else if (toolCallAttempts.incrementAndGet() == 1) {
                                 send(exchange, 404, "{}");
                             } else {
                                 send(exchange, 200, toolCallResult(body, false));
@@ -182,7 +206,7 @@ class McpGatewayHttpTest {
                 });
         McpSessionManager session = session();
 
-        McpToolResult result = session.call("health_check", Map.of());
+        McpToolResult result = session.call("execute_read_query", Map.of());
 
         assertThat(result.isError()).isFalse();
         assertThat(sessionCounter.get()).isEqualTo(2);
@@ -200,12 +224,24 @@ class McpGatewayHttpTest {
                 "test-client");
     }
 
-    private String initializeResult(JsonNode request, String contractVersion) {
+    private boolean isToolCall(JsonNode request, String toolName) {
+        return toolName.equals(request.path("params").path("name").asText(""));
+    }
+
+    private String initializeResult(JsonNode request, String serverVersion) {
         return "{\"jsonrpc\":\"2.0\",\"id\":"
                 + request.path("id").asText("1")
-                + ",\"result\":{\"protocolVersion\":\"2025-11-25\",\"serverInfo\":{\"name\":\"test-mcp\",\"version\":\"0.0.0-test\"},\"_meta\":{\"contract_version\":\""
+                + ",\"result\":{\"protocolVersion\":\"2025-11-25\",\"serverInfo\":{\"name\":\"test-mcp\",\"version\":\""
+                + serverVersion
+                + "\"}}}";
+    }
+
+    private String healthCheckResult(JsonNode request, String contractVersion) {
+        return "{\"jsonrpc\":\"2.0\",\"id\":"
+                + request.path("id").asText("1")
+                + ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"ok\"}],\"structuredContent\":{\"status\":\"ok\",\"contract_version\":\""
                 + contractVersion
-                + "\",\"fake\":true}}}";
+                + "\",\"fake\":true},\"isError\":false}}";
     }
 
     private String toolsListResult(JsonNode request) {

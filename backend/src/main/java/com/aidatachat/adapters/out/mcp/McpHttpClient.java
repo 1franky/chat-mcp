@@ -3,6 +3,7 @@ package com.aidatachat.adapters.out.mcp;
 import com.aidatachat.application.exception.McpCommunicationException;
 import java.net.URI;
 import java.time.Duration;
+import java.util.List;
 import java.util.function.Consumer;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
@@ -14,11 +15,13 @@ import org.springframework.web.reactive.function.client.WebClientRequestExceptio
 import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /** Blocking JSON-RPC transport for the MCP Streamable HTTP client, mirroring ProviderHttpClient. */
 public final class McpHttpClient {
 
     private static final String SESSION_HEADER = "Mcp-Session-Id";
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final WebClient webClient;
     private final Duration timeout;
@@ -40,7 +43,7 @@ public final class McpHttpClient {
                     .uri(uri)
                     .headers(headers)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .accept(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM)
                     .bodyValue(body)
                     .exchangeToMono(this::readResponse)
                     .timeout(timeout)
@@ -70,9 +73,48 @@ public final class McpHttpClient {
                                             retryable(status.value()),
                                             null)));
         }
+        boolean eventStream =
+                response.headers()
+                        .contentType()
+                        .map(type -> type.isCompatibleWith(MediaType.TEXT_EVENT_STREAM))
+                        .orElse(false);
+        if (eventStream) {
+            return response.bodyToFlux(String.class)
+                    .collectList()
+                    .flatMap(
+                            frames -> {
+                                JsonNode message = selectSseMessage(frames);
+                                if (message == null) {
+                                    return Mono.error(
+                                            new McpCommunicationException(
+                                                    "MCP_INVALID_RESPONSE", null, false, null));
+                                }
+                                return Mono.just(new JsonResponse(message, sessionId));
+                            });
+        }
         return response.bodyToMono(JsonNode.class)
                 .switchIfEmpty(Mono.error(new IllegalStateException("MCP response is empty")))
                 .map(body -> new JsonResponse(body, sessionId));
+    }
+
+    // A POST may emit several SSE events (progress notifications before the reply); prefer the
+    // last one carrying an "id", since that's the actual JSON-RPC response.
+    private JsonNode selectSseMessage(List<String> frames) {
+        JsonNode fallback = null;
+        for (String frame : frames) {
+            JsonNode parsed;
+            try {
+                parsed = JSON.readTree(frame);
+            } catch (RuntimeException exception) {
+                continue;
+            }
+            if (parsed.has("id")) {
+                fallback = parsed;
+            } else if (fallback == null) {
+                fallback = parsed;
+            }
+        }
+        return fallback;
     }
 
     private McpCommunicationException normalizeNetworkFailure(RuntimeException exception) {
