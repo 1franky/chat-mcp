@@ -1,5 +1,15 @@
-import { Routes } from '@angular/router';
+import { Routes, UrlMatchResult, UrlSegment } from '@angular/router';
 import { adminGuard, authenticatedGuard, unauthenticatedGuard } from './core/auth/auth.guards';
+
+function chatMatcher(segments: UrlSegment[]): UrlMatchResult | null {
+  if (segments.length === 1 && segments[0].path === 'chat') {
+    return { consumed: segments };
+  }
+  if (segments.length === 2 && segments[0].path === 'chat') {
+    return { consumed: segments, posParams: { conversationId: segments[1] } };
+  }
+  return null;
+}
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'home' },
@@ -31,12 +41,7 @@ export const routes: Routes = [
       import('./features/documents/documents-page').then((module) => module.DocumentsPage),
   },
   {
-    path: 'chat',
-    canActivate: [authenticatedGuard],
-    loadComponent: () => import('./features/chat/chat-page').then((module) => module.ChatPage),
-  },
-  {
-    path: 'chat/:conversationId',
+    matcher: chatMatcher,
     canActivate: [authenticatedGuard],
     loadComponent: () => import('./features/chat/chat-page').then((module) => module.ChatPage),
   },
