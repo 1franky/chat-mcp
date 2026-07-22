@@ -147,3 +147,28 @@ Verificado en navegador real contra el mismo tipo de stack Docker Compose aislad
 - [x] Wiring backend: bean en `ApplicationBeansConfiguration`, validacion de `configuredModelId` requerido en `ProviderManagementService`, pruebas de contrato (conexion, catalogo vacio y streaming) en `ProviderAdaptersTest` contra un servidor HTTP local — sin llamadas pagadas.
 - [x] Frontend: tipo `MINIMAX` en `provider.models.ts`, tile en el selector de `providers-page.ts`/`.html` con el campo Model ID (sin base URL configurable, host fijo), copy actualizado en `home-page.html`.
 - [x] Documentacion actualizada: `docs/providers.md`, `docs/chat.md`, `README.md`, `CHANGELOG.md`.
+
+## Mejoras propuestas (pendientes de aprobacion, reportadas por el propietario 2026-07-22)
+
+- [ ] Mejorar el renderizado de Markdown en el chat para formatear correctamente bloques JSON y
+      otros datos estructurados (por ejemplo, resultados tabulares de `execute_read_query` u otras
+      tools del MCP) — hoy se muestran como texto plano sin resaltado ni formato legible.
+- [ ] Ocultar o tratar visualmente el bloque `<think>...</think>` que algunos modelos (MiniMax-M3
+      observado en pruebas) devuelven en ingles aunque la conversacion sea en espanol — hoy se
+      renderiza tal cual como parte de la respuesta, mezclando el razonamiento interno del modelo en
+      ingles con el resto de la UI en espanol.
+- [ ] Anadir boton de copiar (con copia real al portapapeles, mismo patron que
+      `ChatPage.copy()`/`navigator.clipboard.writeText`) tambien a los mensajes del usuario — hoy
+      `chat-page.html` solo lo muestra en los mensajes `ASSISTANT`.
+
+## Comportamiento observado a monitorear (MiniMax-M3, 2026-07-22)
+
+- [ ] En una conversacion larga con varias tool calls ya completadas con exito (`list_connections`,
+      `list_tables`, `refresh_schema_cache`, etc.), el modelo a veces anuncia una intencion
+      ("Perfecto, voy a generar el SQL... y ejecutarlo:") y el turno termina ahi — `finish_reason`
+      llega como `stop` (no `tool_calls`) desde el propio proveedor, sin invocar ninguna tool. No es
+      un cuelgue ni un error de la app: el backend persiste la generacion como `COMPLETED` con
+      normalidad; es el modelo el que no completa la accion que anuncio. Reintentar el mensaje o usar
+      "Regenerar" lo resuelve en la practica. Si se repite con frecuencia, valorar ajustar el prompt
+      de sistema para MiniMax o anadir un reintento automatico cuando el modelo anuncia una tool call
+      que nunca llega.
