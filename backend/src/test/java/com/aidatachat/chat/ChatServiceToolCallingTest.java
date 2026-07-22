@@ -197,7 +197,8 @@ class ChatServiceToolCallingTest {
                         any(),
                         any(),
                         any(),
-                        any()))
+                        any(),
+                        eq(NOW)))
                 .thenAnswer(
                         invocation -> {
                             MessageToolCallStatus status = invocation.getArgument(3);

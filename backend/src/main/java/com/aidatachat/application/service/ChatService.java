@@ -1051,7 +1051,8 @@ public final class ChatService implements ChatUseCase {
                     null,
                     null,
                     null,
-                    null);
+                    null,
+                    clock.instant());
             Future<McpToolResult> future =
                     toolOrchestrationExecutor.submit(
                             () -> mcp.call(call.toolName(), call.arguments()));
@@ -1079,6 +1080,7 @@ public final class ChatService implements ChatUseCase {
                         result.isError(),
                         result.structuredContent(),
                         null,
+                        now,
                         now);
                 String resultText =
                         result.content().isEmpty()
@@ -1126,6 +1128,7 @@ public final class ChatService implements ChatUseCase {
                     true,
                     result,
                     code,
+                    now,
                     now);
             return new ToolExecutionOutcome(
                     MessageToolCallStatus.BLOCKED, true, result, code, message);
@@ -1142,6 +1145,7 @@ public final class ChatService implements ChatUseCase {
                     true,
                     result,
                     code,
+                    now,
                     now);
             return new ToolExecutionOutcome(
                     MessageToolCallStatus.FAILED, true, result, code, resultText);

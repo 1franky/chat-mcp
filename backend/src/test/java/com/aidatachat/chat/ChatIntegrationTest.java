@@ -317,6 +317,7 @@ class ChatIntegrationTest {
                 false,
                 Map.of("status", "ok"),
                 null,
+                now,
                 now);
         List<ConversationToolCall> toolCalls =
                 conversations
@@ -325,6 +326,55 @@ class ChatIntegrationTest {
         assertThat(toolCalls).hasSize(1);
         assertThat(toolCalls.getFirst().status()).isEqualTo(MessageToolCallStatus.COMPLETED);
         assertThat(toolCalls.getFirst().isError()).isFalse();
+    }
+
+    @Test
+    void updateToolCallResultToRunningLeavesCompletedAtNullButSetsUpdatedAt() {
+        UserAccount owner = register("owner@example.test", "Owner");
+        ProviderSelection selection = fakeProvider(owner);
+        ChatUseCase.ConversationView conversation = createConversation(owner, selection);
+        Instant now = Instant.now();
+
+        ConversationRepository.GenerationMessages generation =
+                conversations.createGeneration(
+                        conversation.id(),
+                        owner.id(),
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        "Hola",
+                        selection.id(),
+                        ProviderType.FAKE,
+                        selection.modelId(),
+                        now);
+        UUID toolCallId = UUID.randomUUID();
+        conversations.recordToolCall(
+                conversation.id(),
+                owner.id(),
+                generation.assistantMessage().id(),
+                toolCallId,
+                1,
+                0,
+                "health_check",
+                "call-1",
+                Map.of("x", 1),
+                MessageToolCallStatus.PENDING,
+                now);
+
+        ConversationToolCall updated =
+                conversations.updateToolCallResult(
+                        conversation.id(),
+                        owner.id(),
+                        toolCallId,
+                        MessageToolCallStatus.RUNNING,
+                        null,
+                        null,
+                        null,
+                        null,
+                        now);
+
+        assertThat(updated.status()).isEqualTo(MessageToolCallStatus.RUNNING);
+        assertThat(updated.completedAt()).isNull();
+        assertThat(updated.updatedAt()).isEqualTo(now);
     }
 
     @Test
