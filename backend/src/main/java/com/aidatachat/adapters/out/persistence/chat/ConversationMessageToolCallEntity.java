@@ -100,13 +100,14 @@ class ConversationMessageToolCallEntity {
             Boolean isError,
             Map<String, Object> result,
             String errorCode,
-            Instant completedAt) {
+            Instant completedAt,
+            Instant updatedAt) {
         this.status = status;
         this.isError = isError;
         this.result = result == null ? null : Map.copyOf(result);
         this.errorCode = errorCode;
         this.completedAt = completedAt;
-        this.updatedAt = completedAt;
+        this.updatedAt = updatedAt;
     }
 
     ConversationToolCall toDomain() {

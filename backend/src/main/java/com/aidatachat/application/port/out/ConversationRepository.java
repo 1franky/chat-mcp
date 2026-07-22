@@ -80,7 +80,8 @@ public interface ConversationRepository {
             Boolean isError,
             Map<String, Object> result,
             String errorCode,
-            Instant completedAt);
+            Instant completedAt,
+            Instant updatedAt);
 
     Map<UUID, List<ConversationToolCall>> findToolCallsForMessages(Collection<UUID> messageIds);
 

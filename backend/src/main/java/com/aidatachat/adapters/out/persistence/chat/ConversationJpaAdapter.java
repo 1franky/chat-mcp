@@ -287,14 +287,15 @@ public class ConversationJpaAdapter implements ConversationRepository {
             Boolean isError,
             Map<String, Object> result,
             String errorCode,
-            Instant completedAt) {
+            Instant completedAt,
+            Instant updatedAt) {
         lockConversation(conversationId, ownerId);
         ConversationMessageToolCallEntity entity =
                 toolCalls
                         .findById(toolCallId)
                         .filter(candidate -> belongsToConversation(candidate, conversationId))
                         .orElseThrow(ConversationNotFoundException::new);
-        entity.updateResult(status, isError, result, errorCode, completedAt);
+        entity.updateResult(status, isError, result, errorCode, completedAt, updatedAt);
         return toolCalls.saveAndFlush(entity).toDomain();
     }
 
