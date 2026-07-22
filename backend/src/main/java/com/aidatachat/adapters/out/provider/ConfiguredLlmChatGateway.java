@@ -26,7 +26,12 @@ import java.util.UUID;
 public final class ConfiguredLlmChatGateway implements LlmChatGateway {
 
     private static final Set<ProviderType> TOOL_CALLING_PROVIDERS =
-            EnumSet.of(ProviderType.OPENAI, ProviderType.ANTHROPIC);
+            EnumSet.of(
+                    ProviderType.OPENAI,
+                    ProviderType.ANTHROPIC,
+                    ProviderType.MINIMAX,
+                    ProviderType.BYTEPLUS,
+                    ProviderType.OPENAI_COMPATIBLE);
 
     private final ProviderConnectionRepository connections;
     private final CredentialCipherPort cipher;
